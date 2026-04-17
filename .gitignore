@@ -1,0 +1,11 @@
+.gradle/
+.gradle-home/
+.gradle-tmp/
+.android-tmp/
+.idea/
+*.iml
+local.properties
+build/
+app/build/
+local-sdk-repo/
+.DS_Store

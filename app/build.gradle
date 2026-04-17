@@ -1,0 +1,61 @@
+apply plugin: "com.android.application"
+
+def sdkArtifactName = "xiaowei-session-core"
+def sdkVersion = "1.0.6"
+def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "com/xiaowei/sdk/session-core/${sdkVersion}")
+
+android {
+    namespace "com.xiaowei.sdk.demo"
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.xiaowei.sdk.demo"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "0.1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""
+        buildConfigField "String", "SDK_VERSION_NAME", "\"${sdkVersion}\""
+    }
+
+    buildTypes {
+        debug {
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+}
+
+if (!localSdkRepoVersionDir.exists()) {
+    throw new GradleException("Missing local SDK Maven repo: ${localSdkRepoVersionDir.absolutePath}. Please unzip xiaowei-sdk-android-1.0.6-maven-repo.zip into ./local-sdk-repo first.")
+}
+
+dependencies {
+    implementation "com.xiaowei.sdk:session-core:${sdkVersion}"
+    implementation "androidx.core:core:1.13.1"
+    implementation "androidx.appcompat:appcompat:1.7.0"
+    implementation "com.google.android.material:material:1.12.0"
+    implementation "androidx.constraintlayout:constraintlayout:2.1.4"
+    // Demo 自己直接使用这些类型，必须显式声明编译依赖，不能依赖 SDK 内部传递实现细节。
+    implementation "com.squareup.okhttp3:okhttp:4.12.0"
+    implementation "com.google.code.gson:gson:2.10.1"
+    implementation("com.airbnb.android:lottie:6.4.0") {
+        exclude group: "com.squareup.okio", module: "okio"
+    }
+
+    testImplementation "junit:junit:4.13.2"
+
+}

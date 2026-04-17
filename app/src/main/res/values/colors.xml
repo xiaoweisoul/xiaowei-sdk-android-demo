@@ -1,0 +1,14 @@
+<resources>
+    <color name="demo_primary">#409EFF</color>
+    <color name="demo_primary_dark">#337ECC</color>
+    <color name="demo_primary_light">#79BBFF</color>
+    <color name="demo_surface">#F7FAFC</color>
+    <color name="demo_surface_alt">#EEF5FF</color>
+    <color name="demo_border">#D9ECFF</color>
+    <color name="demo_text_primary">#1F2D3D</color>
+    <color name="demo_text_secondary">#5E6D82</color>
+    <color name="demo_text_inverse">#FFFFFF</color>
+    <color name="demo_button_disabled">#C0C4CC</color>
+    <color name="demo_panel_bg">#EBEEF5</color>
+    <color name="demo_panel_stroke">#D3D9E2</color>
+</resources>

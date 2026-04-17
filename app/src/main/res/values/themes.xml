@@ -1,0 +1,12 @@
+<resources>
+    <style name="Theme.XiaoweiSdkDemo" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/demo_primary</item>
+        <item name="colorPrimaryVariant">@color/demo_primary_dark</item>
+        <item name="colorSecondary">@color/demo_primary</item>
+        <item name="colorSecondaryVariant">@color/demo_primary_dark</item>
+        <item name="colorOnPrimary">@color/demo_text_inverse</item>
+        <item name="colorOnSecondary">@color/demo_text_inverse</item>
+        <item name="android:statusBarColor">@color/demo_primary_dark</item>
+        <item name="android:windowBackground">@color/demo_surface</item>
+    </style>
+</resources>
