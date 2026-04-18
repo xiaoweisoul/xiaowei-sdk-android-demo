@@ -12,8 +12,8 @@
     <string name="access_key_id_hint">Access Key ID</string>
     <string name="access_key_secret_label">Access Key Secret（服务端签发密钥）</string>
     <string name="access_key_secret_hint">Access Key Secret</string>
-    <string name="integration_app_id_label">integration_app_id（接入应用 ID）</string>
-    <string name="integration_app_id_hint">integration_app_id</string>
+    <string name="integration_app_id_label">integration_app_id（应用标识）</string>
+    <string name="integration_app_id_hint">例如 app_xxxxxxxx</string>
     <string name="soul_id_label">soul_id（当前灵魂 / 角色 ID）</string>
     <string name="soul_id_hint">soul_id</string>
     <string name="ws_url_label">WS URL（会话 WebSocket 地址）</string>

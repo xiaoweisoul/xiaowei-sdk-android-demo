@@ -458,7 +458,7 @@ public class MainActivity extends AppCompatActivity {
                     settings.openApiBaseUrl,
                     settings.accessKeyId,
                     settings.accessKeySecret,
-                    parseRequiredLong(settings.integrationAppId, "integration_app_id"),
+                    requireNonBlank(settings.integrationAppId, "integration_app_id"),
                     requireNonBlank(settings.soulId, "soul_id"),
                     this::appendLog
             );
@@ -853,17 +853,6 @@ public class MainActivity extends AppCompatActivity {
             throw new IllegalArgumentException(fieldName + " 不能为空");
         }
         return value.trim();
-    }
-
-    /**
-     * 把字符串解析成 long，并在错误时抛出明确提示。
-     */
-    private static long parseRequiredLong(String value, String fieldName) {
-        try {
-            return Long.parseLong(requireNonBlank(value, fieldName));
-        } catch (NumberFormatException e) {
-            throw new IllegalArgumentException(fieldName + " 必须是数字");
-        }
     }
 
     /**

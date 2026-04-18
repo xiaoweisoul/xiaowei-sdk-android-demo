@@ -19,21 +19,21 @@ final class AppPrefs {
 
     // 下面这组 DEFAULT_* 常量就是 Demo 的默认配置入口。
     private static final String KEY_OPEN_API_BASE_URL = "open_api_base_url";
-    // private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.31.108:8080";
-    private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
+    private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.31.108:8080";
+    // private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
 
     private static final String KEY_WS_URL = "ws_url";
-    // private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
-    private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
+    private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
+    // private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
 
     private static final String KEY_ACCESS_KEY_ID = "access_key_id";
-    private static final String DEFAULT_ACCESS_KEY_ID = "ak_109da15a5342c60d8874b186";
+    private static final String DEFAULT_ACCESS_KEY_ID = "ak_be60d1530176d7e4b915ed9c";
 
     private static final String KEY_ACCESS_KEY_SECRET = "access_key_secret";
-    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_3af9b997703dde5090e25bb6d43beb990bc7ee22f6c9e5be";
+    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7";
 
     private static final String KEY_INTEGRATION_APP_ID = "integration_app_id";
-    private static final String DEFAULT_INTEGRATION_APP_ID = "2";
+    private static final String DEFAULT_INTEGRATION_APP_ID = "app_remav935";
 
     private static final String KEY_SOUL_ID = "soul_id";
     private static final String DEFAULT_SOUL_ID = "soul_demo_game_npc_shopkeeper_v1";

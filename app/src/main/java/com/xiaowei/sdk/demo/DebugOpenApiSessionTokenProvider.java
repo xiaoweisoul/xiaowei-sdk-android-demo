@@ -38,7 +38,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
     private final String openApiBaseUrl;
     private final String accessKeyId;
     private final String accessKeySecret;
-    private final long integrationAppId;
+    private final String integrationAppId;
     private final String soulId;
     private final Logger logger;
 
@@ -49,7 +49,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
             @NonNull String openApiBaseUrl,
             @NonNull String accessKeyId,
             @NonNull String accessKeySecret,
-            long integrationAppId,
+            @NonNull String integrationAppId,
             @NonNull String soulId,
             @NonNull Logger logger
     ) {
@@ -57,7 +57,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
         this.openApiBaseUrl = requireNonBlank(trimTrailingSlash(openApiBaseUrl), "openApiBaseUrl");
         this.accessKeyId = requireNonBlank(accessKeyId, "accessKeyId");
         this.accessKeySecret = requireNonBlank(accessKeySecret, "accessKeySecret");
-        this.integrationAppId = integrationAppId;
+        this.integrationAppId = requireNonBlank(integrationAppId, "integrationAppId");
         this.soulId = requireNonBlank(soulId, "soulId");
         this.logger = logger;
     }

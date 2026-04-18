@@ -56,6 +56,12 @@ Demo 运行时需要你自己填写以下参数：
 - `Logical Device ID`
 - `Logical Client ID`
 
+其中需要特别注意：
+
+- `Integration App ID` 填的是控制台“应用中心”列表里展示的 `app_id`。
+- 当前值格式是字符串，例如 `app_g1ht6a8o`。
+- `Soul ID` 填的是元神配置里的稳定标识，例如 `soul_acme_companion_main_v1`。
+
 这些值不会在仓库中提供真实默认值。请使用你自己的测试环境配置。
 
 ## 如何运行
@@ -96,6 +102,8 @@ Demo 运行时需要你自己填写以下参数：
 设置页用于保存连接参数。点击 `Save` 后，主页面下一次 `Connect` 会直接读取这些值。
 
 这个 Demo 会把配置保存在本地 `SharedPreferences` 中，方便重复测试。
+
+设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
 
 ## 推荐阅读顺序
 
@@ -148,7 +156,8 @@ Demo 运行时需要你自己填写以下参数：
 - 设置页里的 `OpenAPI Base URL` 是否正确
 - `WS URL` 是否正确
 - `Access Key ID / Secret` 是否正确
-- `Integration App ID`、`Soul ID`、`Protocol Version` 是否匹配服务端要求
+- `Integration App ID` 是否填写为应用中心展示的字符串 `app_id`，例如 `app_g1ht6a8o`
+- `Soul ID`、`Protocol Version` 是否匹配服务端要求
 
 ### 连接成功但无法开麦
 
