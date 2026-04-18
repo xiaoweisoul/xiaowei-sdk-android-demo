@@ -261,19 +261,23 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 播放单帧 PCM；必要时会自动申请音频焦点并复用 AudioTrack。
+     * 播放单帧 PCM；先确保焦点和播放链路都已就绪，再解除静音并写入真实数据。
+     * 这样可以避免在尚未拿到焦点时就恢复音量，减少起播瞬态噪声。
      */
     private void playFrame(@NonNull PlaybackItem item) {
         try {
             synchronized (audioLock) {
                 idleStateEntered = false;
-                clearForceMuteLocked();
             }
             if (!ensureAudioFocus()) {
                 logLine("[TtsPlayer] 音频焦点申请失败，跳过 seq=" + item.seq);
                 return;
             }
             AudioTrack track = ensureAudioTrack(item.sampleRateHz, item.channels);
+            synchronized (audioLock) {
+                // 焦点和 Track 都已准备完成后再解除静音，避免过早恢复音量放大起播瞬态噪声。
+                clearForceMuteLocked();
+            }
             ensureTrackPlaying(track);
             byte[] data = item.data;
             if (data == null || data.length == 0) {
@@ -298,6 +302,7 @@ final class AssistantPcmPlayer {
 
     /**
      * 确保当前存在与 PCM 参数匹配的 AudioTrack；参数变化时自动重建。
+     * 新建后会立即进入播放态并灌入一小段静音，尽量把底层起播边沿前置掉。
      */
     @NonNull
     private AudioTrack ensureAudioTrack(int sampleRateHz, int channels) {
@@ -553,6 +558,7 @@ final class AssistantPcmPlayer {
 
     /**
      * 当前一轮新的可播放 PCM 到来时，恢复 AudioTrack 正常音量。
+     * 这里只在焦点和 Track 都准备完成后调用，避免过早解除静音放大起播瞬态。
      */
     private void clearForceMuteLocked() {
         if (!forceMute) {
@@ -564,6 +570,7 @@ final class AssistantPcmPlayer {
 
     /**
      * 把逻辑音量同步到 AudioTrack；静音态下把实际音量压到 0。
+     * 这是当前 Demo 用来替代 pause/flush 硬停播的最小静音门控手段。
      */
     private void applyTrackVolumeLocked() {
         AudioTrack track = audioTrack;
