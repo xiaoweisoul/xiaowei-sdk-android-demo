@@ -19,12 +19,12 @@ final class AppPrefs {
 
     // 下面这组 DEFAULT_* 常量就是 Demo 的默认配置入口。
     private static final String KEY_OPEN_API_BASE_URL = "open_api_base_url";
-    private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.31.108:8080";
-    // private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
+    // private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.31.108:8080";
+    private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
 
     private static final String KEY_WS_URL = "ws_url";
-    private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
-    // private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
+    // private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
+    private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
 
     private static final String KEY_ACCESS_KEY_ID = "access_key_id";
     private static final String DEFAULT_ACCESS_KEY_ID = "ak_be60d1530176d7e4b915ed9c";
