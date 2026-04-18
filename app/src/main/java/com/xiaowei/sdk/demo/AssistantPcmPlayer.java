@@ -25,11 +25,41 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class AssistantPcmPlayer {
     private static final String TAG = "AssistantPcmPlayer";
+
+    /**
+     * 下行 PCM 播放队列容量上限；够大可覆盖短时突发下发，又避免无限积压占用内存。
+     */
     private static final int QUEUE_CAPACITY = 256;
+
+    /**
+     * 播放队列满载时，入队线程每次等待 AudioTrack 消费腾挪空间的最长时长。
+     */
     private static final long QUEUE_BACKPRESSURE_WAIT_MS = 200L;
+
+    /**
+     * 播放线程空闲超时；超过该时长仍无新 PCM，则把当前链路收口到静音空闲态。
+     */
     private static final long IDLE_STOP_TIMEOUT_MS = 5000L;
+
+    /**
+     * 销毁播放器时等待后台线程退出的最长时间，避免主线程无限阻塞。
+     */
     private static final long RELEASE_JOIN_TIMEOUT_MS = 1500L;
+
+    /**
+     * 正常播放时的固定输出音量；静音态会在此基础上额外压到 0。
+     */
     private static final float PLAYBACK_VOLUME = 1.0f;
+
+    /**
+     * 新建 AudioTrack 后预热写入的静音时长，用于尽量提前触发底层起播链路，降低首声爆破音概率。
+     */
+    private static final int PREWARM_SILENCE_MS = 12;
+
+    /**
+     * 每轮回复首帧 PCM 的样本级淡入时长，避免首样本从非零点硬起播产生 click/pop。
+     */
+    private static final int START_FADE_IN_MS = 8;
 
     interface Logger {
         /**
@@ -56,6 +86,8 @@ final class AssistantPcmPlayer {
     private String latestAcceptedResponseId;
     @Nullable
     private String suppressedResponseId;
+    @Nullable
+    private String lastFadeInResponseId;
     private boolean suppressUnknownResponseUntilNextKnown;
 
     @Nullable
@@ -64,6 +96,7 @@ final class AssistantPcmPlayer {
     private AudioFocusRequest audioFocusRequest;
     private boolean audioFocusGranted;
     private boolean idleStateEntered;
+    private boolean forceMute;
     private int currentSampleRateHz = -1;
     private int currentChannels = -1;
 
@@ -106,7 +139,7 @@ final class AssistantPcmPlayer {
                 frame.getChannels(),
                 frame.getSeq(),
                 frame.getResponseId(),
-                Arrays.copyOf(frame.getData(), frame.getData().length)
+                copyFrameData(frame)
         );
         try {
             while (!released.get()) {
@@ -142,6 +175,13 @@ final class AssistantPcmPlayer {
      * 在本地发送 interrupt=true 前，先停掉当前播放，并持续屏蔽旧 response 的尾包。
      */
     void interruptAndSuppressCurrentResponse() {
+        suppressCurrentResponseAndStop("[TtsPlayer] 本地 interrupt=true");
+    }
+
+    /**
+     * 统一执行“屏蔽旧 response 尾包 + 本地软停止”。
+     */
+    private void suppressCurrentResponseAndStop(@NonNull String actionLabel) {
         if (released.get()) {
             return;
         }
@@ -150,11 +190,12 @@ final class AssistantPcmPlayer {
             responseId = latestAcceptedResponseId;
             suppressedResponseId = responseId;
             suppressUnknownResponseUntilNextKnown = true;
+            muteAudioTrackLocked(null);
         }
         if (responseId == null) {
-            logLine("[TtsPlayer] 本地 interrupt=true：已停止播放，并在新 response 到来前丢弃旧尾包 PCM");
+            logLine(actionLabel + "：已停止播放，并在新 response 到来前丢弃旧尾包 PCM");
         } else {
-            logLine("[TtsPlayer] 本地 interrupt=true：已停止播放，并屏蔽旧 responseId=" + responseId + " 的尾包");
+            logLine(actionLabel + "：已停止播放，并屏蔽旧 responseId=" + responseId + " 的尾包");
         }
         flushAndStop();
     }
@@ -165,6 +206,7 @@ final class AssistantPcmPlayer {
     void flushStopAndResetResponseState() {
         synchronized (audioLock) {
             latestAcceptedResponseId = null;
+            lastFadeInResponseId = null;
             clearSuppressionLocked();
         }
         flushAndStop();
@@ -219,7 +261,8 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 播放单帧 PCM；必要时会自动申请音频焦点并复用 AudioTrack。
+     * 播放单帧 PCM；先确保焦点和播放链路都已就绪，再解除静音并写入真实数据。
+     * 这样可以避免在尚未拿到焦点时就恢复音量，减少起播瞬态噪声。
      */
     private void playFrame(@NonNull PlaybackItem item) {
         try {
@@ -231,6 +274,10 @@ final class AssistantPcmPlayer {
                 return;
             }
             AudioTrack track = ensureAudioTrack(item.sampleRateHz, item.channels);
+            synchronized (audioLock) {
+                // 焦点和 Track 都已准备完成后再解除静音，避免过早恢复音量放大起播瞬态噪声。
+                clearForceMuteLocked();
+            }
             ensureTrackPlaying(track);
             byte[] data = item.data;
             if (data == null || data.length == 0) {
@@ -255,6 +302,7 @@ final class AssistantPcmPlayer {
 
     /**
      * 确保当前存在与 PCM 参数匹配的 AudioTrack；参数变化时自动重建。
+     * 新建后会立即进入播放态并灌入一小段静音，尽量把底层起播边沿前置掉。
      */
     @NonNull
     private AudioTrack ensureAudioTrack(int sampleRateHz, int channels) {
@@ -288,10 +336,12 @@ final class AssistantPcmPlayer {
                 }
                 throw new IllegalStateException("AudioTrack init failed");
             }
-            track.setVolume(PLAYBACK_VOLUME);
             audioTrack = track;
             currentSampleRateHz = sampleRateHz;
             currentChannels = channels;
+            applyTrackVolumeLocked();
+            ensureTrackPlaying(track);
+            primeTrackWithSilence(track, sampleRateHz, channels);
             logLine("[TtsPlayer] AudioTrack usage=USAGE_MEDIA strategy=" + playbackStrategyLabel + " rawStrategy=" + playbackStrategy);
             logLine("[TtsPlayer] 创建播放链路 sampleRate=" + sampleRateHz + " channels=" + channels + " bufferBytes=" + bufferBytes);
             return track;
@@ -358,20 +408,22 @@ final class AssistantPcmPlayer {
         if (focusChange == AudioManager.AUDIOFOCUS_LOSS
                 || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT
                 || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK) {
+            synchronized (audioLock) {
+                audioFocusGranted = false;
+            }
             logLine("[TtsPlayer] 音频焦点丢失，停止当前播放");
             flushAndStop();
         }
     }
 
     /**
-     * 进入静默态：保留 AudioTrack，释放音频焦点，减少设备功放和路由反复抖动。
+     * 进入静默态：保留 AudioTrack 与当前焦点，只做本地静音，减少硬切播放链路导致的爆破音。
      */
     private void enterIdleState(@NonNull String reason) {
         synchronized (audioLock) {
             boolean shouldLog = !idleStateEntered;
             idleStateEntered = true;
-            pauseAndFlushAudioTrackLocked(shouldLog ? reason : null);
-            abandonAudioFocusLocked();
+            muteAudioTrackLocked(shouldLog ? reason : null);
         }
     }
 
@@ -419,24 +471,113 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 让当前 AudioTrack 停到静默态，但不销毁对象，避免频繁重建导致爆破音。
+     * 复制一帧 PCM；如果是新一轮回复的首帧，则对首段样本做极短淡入。
      */
-    private void pauseAndFlushAudioTrackLocked(@Nullable String reason) {
-        AudioTrack track = audioTrack;
-        if (track == null) {
+    @NonNull
+    private byte[] copyFrameData(@NonNull PcmFrame frame) {
+        byte[] data = Arrays.copyOf(frame.getData(), frame.getData().length);
+        if (shouldApplyLeadingFadeIn(frame)) {
+            applyLeadingFadeIn(data, frame.getSampleRateHz(), frame.getChannels());
+        }
+        return data;
+    }
+
+    /**
+     * 只对每轮回复的首帧补淡入，减少首样本非零起跳带来的爆破音。
+     */
+    private boolean shouldApplyLeadingFadeIn(@NonNull PcmFrame frame) {
+        synchronized (audioLock) {
+            String responseId = normalizeResponseId(frame.getResponseId());
+            if (responseId != null) {
+                if (responseId.equals(lastFadeInResponseId)) {
+                    return false;
+                }
+                lastFadeInResponseId = responseId;
+                return true;
+            }
+            return frame.getSeq() <= 0;
+        }
+    }
+
+    /**
+     * 直接修改 PCM 首段波形包络，避免首帧从非零点硬起播。
+     */
+    private void applyLeadingFadeIn(@NonNull byte[] data, int sampleRateHz, int channels) {
+        if (channels <= 0 || data.length < channels * 2) {
             return;
         }
-        try {
-            track.pause();
-        } catch (Exception ignored) {
+        int totalFrames = data.length / (channels * 2);
+        if (totalFrames <= 0) {
+            return;
         }
+        int fadeFrames = Math.min(totalFrames, Math.max(1, (sampleRateHz * START_FADE_IN_MS) / 1000));
+        for (int frameIndex = 0; frameIndex < fadeFrames; frameIndex += 1) {
+            float gain = (float) (frameIndex + 1) / (float) fadeFrames;
+            for (int channelIndex = 0; channelIndex < channels; channelIndex += 1) {
+                int sampleIndex = ((frameIndex * channels) + channelIndex) * 2;
+                short sample = (short) ((data[sampleIndex] & 0xff) | (data[sampleIndex + 1] << 8));
+                int scaled = Math.round(sample * gain);
+                data[sampleIndex] = (byte) (scaled & 0xff);
+                data[sampleIndex + 1] = (byte) ((scaled >> 8) & 0xff);
+            }
+        }
+    }
+
+    /**
+     * 新建 AudioTrack 后先灌入一小段静音，尽量把首轮真实出声前的硬件起播边沿前置掉。
+     */
+    private void primeTrackWithSilence(@NonNull AudioTrack track, int sampleRateHz, int channels) {
+        int silenceFrames = Math.max(1, (sampleRateHz * PREWARM_SILENCE_MS) / 1000);
+        byte[] silence = new byte[silenceFrames * channels * 2];
         try {
-            track.flush();
+            int written = track.write(silence, 0, silence.length, AudioTrack.WRITE_BLOCKING);
+            if (written > 0) {
+                track.flush();
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "prime track with silence failed", e);
+        }
+    }
+
+    /**
+     * 让当前 AudioTrack 进入强制静音态，但不 pause/flush，避免打断时硬切波形。
+     */
+    private void muteAudioTrackLocked(@Nullable String reason) {
+        if (audioTrack == null) {
+            return;
+        }
+        forceMute = true;
+        try {
+            applyTrackVolumeLocked();
         } catch (Exception ignored) {
         }
         if (reason != null && !reason.isEmpty()) {
             logLine("[TtsPlayer] 停止播放: " + reason);
         }
+    }
+
+    /**
+     * 当前一轮新的可播放 PCM 到来时，恢复 AudioTrack 正常音量。
+     * 这里只在焦点和 Track 都准备完成后调用，避免过早解除静音放大起播瞬态。
+     */
+    private void clearForceMuteLocked() {
+        if (!forceMute) {
+            return;
+        }
+        forceMute = false;
+        applyTrackVolumeLocked();
+    }
+
+    /**
+     * 把逻辑音量同步到 AudioTrack；静音态下把实际音量压到 0。
+     * 这是当前 Demo 用来替代 pause/flush 硬停播的最小静音门控手段。
+     */
+    private void applyTrackVolumeLocked() {
+        AudioTrack track = audioTrack;
+        if (track == null) {
+            return;
+        }
+        track.setVolume(forceMute ? 0.0f : PLAYBACK_VOLUME);
     }
 
     /**
@@ -453,6 +594,7 @@ final class AssistantPcmPlayer {
         currentSampleRateHz = -1;
         currentChannels = -1;
         idleStateEntered = false;
+        forceMute = false;
         try {
             track.pause();
         } catch (Exception ignored) {
@@ -525,6 +667,15 @@ final class AssistantPcmPlayer {
             return Integer.MIN_VALUE;
         }
         return AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK;
+    }
+
+    @Nullable
+    private static String normalizeResponseId(@Nullable String responseId) {
+        if (responseId == null) {
+            return null;
+        }
+        String normalized = responseId.trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     /**
