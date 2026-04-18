@@ -7,7 +7,6 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.os.Build;
-import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -26,15 +25,41 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 final class AssistantPcmPlayer {
     private static final String TAG = "AssistantPcmPlayer";
+
+    /**
+     * 下行 PCM 播放队列容量上限；够大可覆盖短时突发下发，又避免无限积压占用内存。
+     */
     private static final int QUEUE_CAPACITY = 256;
+
+    /**
+     * 播放队列满载时，入队线程每次等待 AudioTrack 消费腾挪空间的最长时长。
+     */
     private static final long QUEUE_BACKPRESSURE_WAIT_MS = 200L;
+
+    /**
+     * 播放线程空闲超时；超过该时长仍无新 PCM，则把当前链路收口到静音空闲态。
+     */
     private static final long IDLE_STOP_TIMEOUT_MS = 5000L;
+
+    /**
+     * 销毁播放器时等待后台线程退出的最长时间，避免主线程无限阻塞。
+     */
     private static final long RELEASE_JOIN_TIMEOUT_MS = 1500L;
+
+    /**
+     * 正常播放时的固定输出音量；静音态会在此基础上额外压到 0。
+     */
     private static final float PLAYBACK_VOLUME = 1.0f;
-    private static final int VOLUME_RAMP_STEPS = 4;
-    private static final long VOLUME_RAMP_STEP_DELAY_MS = 3L;
-    private static final int START_FADE_IN_MS = 8;
+
+    /**
+     * 新建 AudioTrack 后预热写入的静音时长，用于尽量提前触发底层起播链路，降低首声爆破音概率。
+     */
     private static final int PREWARM_SILENCE_MS = 12;
+
+    /**
+     * 每轮回复首帧 PCM 的样本级淡入时长，避免首样本从非零点硬起播产生 click/pop。
+     */
+    private static final int START_FADE_IN_MS = 8;
 
     interface Logger {
         /**
@@ -61,10 +86,9 @@ final class AssistantPcmPlayer {
     private String latestAcceptedResponseId;
     @Nullable
     private String suppressedResponseId;
-    private boolean suppressUnknownResponseUntilNextKnown;
     @Nullable
-    private String lastStartedResponseId;
-    private boolean unknownResponseStarted;
+    private String lastFadeInResponseId;
+    private boolean suppressUnknownResponseUntilNextKnown;
 
     @Nullable
     private AudioTrack audioTrack;
@@ -115,7 +139,7 @@ final class AssistantPcmPlayer {
                 frame.getChannels(),
                 frame.getSeq(),
                 frame.getResponseId(),
-                copyPcmData(frame, shouldApplyLeadingFadeIn(frame))
+                copyFrameData(frame)
         );
         try {
             while (!released.get()) {
@@ -155,13 +179,6 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * realtime 开始监听前先把当前 TTS 软打断，避免边播边开麦时硬切 AudioTrack。
-     */
-    void interruptForRealtimeListenStart() {
-        suppressCurrentResponseAndStop("[TtsPlayer] realtime 开始监听前，本地软打断当前播放");
-    }
-
-    /**
      * 统一执行“屏蔽旧 response 尾包 + 本地软停止”。
      */
     private void suppressCurrentResponseAndStop(@NonNull String actionLabel) {
@@ -189,8 +206,7 @@ final class AssistantPcmPlayer {
     void flushStopAndResetResponseState() {
         synchronized (audioLock) {
             latestAcceptedResponseId = null;
-            lastStartedResponseId = null;
-            unknownResponseStarted = false;
+            lastFadeInResponseId = null;
             clearSuppressionLocked();
         }
         flushAndStop();
@@ -450,38 +466,32 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 为每轮回复的首帧 PCM 补一个极短淡入，减少首样本非零起跳带来的爆破音。
+     * 复制一帧 PCM；如果是新一轮回复的首帧，则对首段样本做极短淡入。
+     */
+    @NonNull
+    private byte[] copyFrameData(@NonNull PcmFrame frame) {
+        byte[] data = Arrays.copyOf(frame.getData(), frame.getData().length);
+        if (shouldApplyLeadingFadeIn(frame)) {
+            applyLeadingFadeIn(data, frame.getSampleRateHz(), frame.getChannels());
+        }
+        return data;
+    }
+
+    /**
+     * 只对每轮回复的首帧补淡入，减少首样本非零起跳带来的爆破音。
      */
     private boolean shouldApplyLeadingFadeIn(@NonNull PcmFrame frame) {
         synchronized (audioLock) {
             String responseId = normalizeResponseId(frame.getResponseId());
-            if (responseId == null) {
-                if (unknownResponseStarted) {
+            if (responseId != null) {
+                if (responseId.equals(lastFadeInResponseId)) {
                     return false;
                 }
-                unknownResponseStarted = true;
-                lastStartedResponseId = null;
+                lastFadeInResponseId = responseId;
                 return true;
             }
-            if (responseId.equals(lastStartedResponseId)) {
-                return false;
-            }
-            lastStartedResponseId = responseId;
-            unknownResponseStarted = false;
-            return true;
+            return frame.getSeq() <= 0;
         }
-    }
-
-    /**
-     * 复制一帧 PCM；若是新一轮回复首帧，则直接在样本级做淡入。
-     */
-    @NonNull
-    private byte[] copyPcmData(@NonNull PcmFrame frame, boolean applyLeadingFadeIn) {
-        byte[] data = Arrays.copyOf(frame.getData(), frame.getData().length);
-        if (applyLeadingFadeIn) {
-            applyLeadingFadeIn(data, frame.getSampleRateHz(), frame.getChannels());
-        }
-        return data;
     }
 
     /**
@@ -531,9 +541,6 @@ final class AssistantPcmPlayer {
         if (audioTrack == null) {
             return;
         }
-        if (!forceMute) {
-            rampTrackVolumeLocked(PLAYBACK_VOLUME, 0.0f);
-        }
         forceMute = true;
         try {
             applyTrackVolumeLocked();
@@ -552,7 +559,7 @@ final class AssistantPcmPlayer {
             return;
         }
         forceMute = false;
-        rampTrackVolumeLocked(0.0f, PLAYBACK_VOLUME);
+        applyTrackVolumeLocked();
     }
 
     /**
@@ -564,28 +571,6 @@ final class AssistantPcmPlayer {
             return;
         }
         track.setVolume(forceMute ? 0.0f : PLAYBACK_VOLUME);
-    }
-
-    /**
-     * 以极短淡变切换音量，尽量避免 0/1 突变带来的 click/pop。
-     */
-    private void rampTrackVolumeLocked(float from, float to) {
-        AudioTrack track = audioTrack;
-        if (track == null) {
-            return;
-        }
-        if (VOLUME_RAMP_STEPS <= 1 || from == to) {
-            track.setVolume(to);
-            return;
-        }
-        for (int step = 1; step <= VOLUME_RAMP_STEPS; step += 1) {
-            float progress = (float) step / (float) VOLUME_RAMP_STEPS;
-            float volume = from + ((to - from) * progress);
-            track.setVolume(volume);
-            if (step < VOLUME_RAMP_STEPS) {
-                SystemClock.sleep(VOLUME_RAMP_STEP_DELAY_MS);
-            }
-        }
     }
 
     /**

@@ -554,10 +554,6 @@ public class MainActivity extends AppCompatActivity {
      */
     private void runStartListen() {
         try {
-            AssistantPcmPlayer player = assistantPcmPlayer;
-            if (player != null) {
-                player.interruptForRealtimeListenStart();
-            }
             sessionClient.startRealtimeListen();
             appendLog("[Listen] startRealtimeListen() 成功！");
             finishListenAction(true);
