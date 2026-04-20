@@ -36,7 +36,7 @@ final class AppPrefs {
     private static final String DEFAULT_INTEGRATION_APP_ID = "app_remav935";
 
     private static final String KEY_SOUL_ID = "soul_id";
-    private static final String DEFAULT_SOUL_ID = "soul_demo_game_npc_shopkeeper_v1";
+    private static final String DEFAULT_SOUL_ID = "soul_demo_chinese_female_chat_assistant_v1";
 
     private static final String KEY_PROTOCOL_VERSION = "protocol_version";
     private static final String DEFAULT_PROTOCOL_VERSION = "1";
