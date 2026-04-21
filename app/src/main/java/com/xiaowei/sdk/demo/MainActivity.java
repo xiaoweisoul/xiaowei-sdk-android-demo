@@ -10,12 +10,16 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.widget.LinearLayout;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -57,6 +61,17 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean ENABLE_ASSISTANT_PCM_PLAYBACK = true;
     private static final String EMPTY_TOOL_INPUT_SCHEMA_JSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
+    private static final String SOUL_ID_CHINESE_FEMALE = "soul_demo_chinese_female_chat_assistant_v1";
+    private static final String SOUL_ID_CHINESE_MALE = "soul_demo_chinese_male_chat_assistant_v1";
+    private static final String SOUL_ID_JAPANESE_FEMALE = "soul_demo_japanese_female_chat_assistant_v1";
+    private static final String SOUL_ID_JAPANESE_MALE = "soul_demo_japanese_male_chat_assistant_v1";
+    private static final SoulProfile[] BUILT_IN_SOUL_PROFILES = new SoulProfile[]{
+            new SoulProfile(R.string.soul_option_chinese_female, SOUL_ID_CHINESE_FEMALE),
+            new SoulProfile(R.string.soul_option_chinese_male, SOUL_ID_CHINESE_MALE),
+            new SoulProfile(R.string.soul_option_japanese_female, SOUL_ID_JAPANESE_FEMALE),
+            new SoulProfile(R.string.soul_option_japanese_male, SOUL_ID_JAPANESE_MALE)
+    };
+    private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
 
     // 所有会话动作都串行提交，避免多按钮并发触发状态竞争。
     private final ExecutorService sessionExecutor = Executors.newSingleThreadExecutor();
@@ -70,17 +85,25 @@ public class MainActivity extends AppCompatActivity {
     // 按文档建议，Demo 在单次连接内用简单自增数字生成 client_input_id。
     private int nextClientInputSequence = 1;
 
+    private LinearLayout languageButtonContainer;
+    private ImageButton languageButton;
     private ImageButton openSettingsButton;
     private Button connectButton;
     private Button listenButton;
     private Button sendTextButton;
+    private Spinner soulSelectorSpinner;
     private ImageButton clearLogsButton;
     private LottieAnimationView expressionAnimationView;
+    private TextView sdkInfoLabelText;
     private TextView sdkInfoValueText;
+    private TextView languageValueText;
+    private TextView soulSelectorLabelText;
+    private TextView logsPanelTitleText;
     private TextView logsText;
     private ScrollView logsScrollView;
     private boolean listening;
     private boolean listenActionRunning;
+    private boolean suppressSoulSelectorCallback;
     private SessionState currentSessionState = SessionState.DISCONNECTED;
 
     /**
@@ -93,11 +116,13 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ensureAssistantPcmPlayerConfigured(false);
         bindViews();
+        bindSoulSelector();
         bindSessionListener();
         registerMcpTools();
         bindActions();
-        renderSdkInfo();
         renderIdleState();
+        applyDemoLanguageTexts();
+        renderSdkInfo();
         renderStartupAudioPreprocessPreview();
         requestRecordAudioPermissionIfNeeded();
         appendLog("[Demo] playback_enabled=" + ENABLE_ASSISTANT_PCM_PLAYBACK
@@ -110,6 +135,8 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         ensureAssistantPcmPlayerConfigured(true);
+        syncSoulSelectorSelection();
+        applyDemoLanguageTexts();
     }
 
     /**
@@ -149,15 +176,50 @@ public class MainActivity extends AppCompatActivity {
      * 绑定主页面控件引用。
      */
     private void bindViews() {
+        languageButtonContainer = findViewById(R.id.button_language_container);
+        languageButton = findViewById(R.id.button_language);
         openSettingsButton = findViewById(R.id.button_open_settings);
         connectButton = findViewById(R.id.button_connect);
         listenButton = findViewById(R.id.button_listen);
         sendTextButton = findViewById(R.id.button_send_text);
+        soulSelectorSpinner = findViewById(R.id.spinner_soul_selector);
         clearLogsButton = findViewById(R.id.button_clear_logs);
         expressionAnimationView = findViewById(R.id.view_expression_animation);
+        sdkInfoLabelText = findViewById(R.id.text_sdk_label);
         sdkInfoValueText = findViewById(R.id.text_sdk_value);
+        languageValueText = findViewById(R.id.text_language_value);
+        soulSelectorLabelText = findViewById(R.id.text_soul_selector_label);
+        logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
+    }
+
+    /**
+     * 绑定主页面内置角色下拉框，方便公开试用时快速切换四个默认元神。
+     */
+    private void bindSoulSelector() {
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                buildSoulProfileLabels()
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        soulSelectorSpinner.setAdapter(adapter);
+        soulSelectorSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                if (suppressSoulSelectorCallback) {
+                    return;
+                }
+                applySoulSelection(position, true);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                // Spinner 始终有默认项，这里无需额外处理。
+            }
+        });
+        syncSoulSelectorSelection();
     }
 
     /**
@@ -248,6 +310,7 @@ public class MainActivity extends AppCompatActivity {
      * 绑定页面按钮行为。
      */
     private void bindActions() {
+        languageButtonContainer.setOnClickListener(v -> showLanguageDialog());
         openSettingsButton.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
 
         connectButton.setOnClickListener(v -> {
@@ -268,6 +331,143 @@ public class MainActivity extends AppCompatActivity {
         listenButton.setOnClickListener(v -> onListenButtonClicked());
         sendTextButton.setOnClickListener(v -> showSendTextDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
+    }
+
+    /**
+     * 返回四个内置元神的展示名称。
+     */
+    @NonNull
+    private String[] buildSoulProfileLabels() {
+        String[] labels = new String[BUILT_IN_SOUL_PROFILES.length];
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        for (int index = 0; index < BUILT_IN_SOUL_PROFILES.length; index++) {
+            labels[index] = getLocalizedText(BUILT_IN_SOUL_PROFILES[index].labelResId, BUILT_IN_SOUL_PROFILES[index].labelResId, demoLanguage);
+        }
+        return labels;
+    }
+
+    /**
+     * 弹出主页面语言切换对话框；当前只支持中文和日文。
+     */
+    private void showLanguageDialog() {
+        String currentLanguage = AppPrefs.getDemoLanguage(this);
+        int checkedIndex = AppPrefs.DEMO_LANGUAGE_JA.equals(currentLanguage) ? 1 : 0;
+        String[] labels = new String[]{getString(R.string.language_option_zh), getString(R.string.language_option_ja)};
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.language_dialog_title)
+                .setSingleChoiceItems(labels, checkedIndex, (dialog, which) -> {
+                    applyDemoLanguage(DEMO_LANGUAGES[which]);
+                    dialog.dismiss();
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /**
+     * 应用主页面展示语言并刷新控件文案。
+     */
+    private void applyDemoLanguage(@NonNull String language) {
+        String normalized = AppPrefs.DEMO_LANGUAGE_JA.equals(language) ? AppPrefs.DEMO_LANGUAGE_JA : AppPrefs.DEMO_LANGUAGE_ZH;
+        if (!TextUtils.equals(AppPrefs.getDemoLanguage(this), normalized)) {
+            AppPrefs.setDemoLanguage(this, normalized);
+        }
+        applyDemoLanguageTexts();
+    }
+
+    /**
+     * 刷新主页面所有跟语言切换有关的文案，不改动日志正文和设置页。
+     */
+    private void applyDemoLanguageTexts() {
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        String languageLabel = getLocalizedText(R.string.language_value_zh, R.string.language_value_ja, demoLanguage);
+        languageButtonContainer.setContentDescription(getString(R.string.language_switcher) + "：" + languageLabel);
+        languageButton.setContentDescription(getString(R.string.language_switcher));
+        languageValueText.setText(languageLabel);
+        openSettingsButton.setContentDescription(getString(R.string.settings));
+        sdkInfoLabelText.setText(getLocalizedText(R.string.sdk_info_label, R.string.sdk_info_label_ja, demoLanguage));
+        soulSelectorLabelText.setText(getLocalizedText(R.string.soul_selector_label, R.string.soul_selector_label_ja, demoLanguage));
+        logsPanelTitleText.setText(getLocalizedText(R.string.logs_panel, R.string.logs_panel_ja, demoLanguage));
+        clearLogsButton.setContentDescription(getLocalizedText(R.string.clear_logs, R.string.clear_logs_ja, demoLanguage));
+        if (TextUtils.equals(logsText.getText(), getString(R.string.logs_empty))
+                || TextUtils.equals(logsText.getText(), getString(R.string.logs_empty_ja))) {
+            logsText.setText(getLocalizedText(R.string.logs_empty, R.string.logs_empty_ja, demoLanguage));
+        }
+        refreshSoulSelectorLabels();
+        renderSdkInfo();
+        updateActionButtons(currentSessionState);
+    }
+
+    /**
+     * 刷新角色下拉项文案，同时保持当前选中项不变。
+     */
+    private void refreshSoulSelectorLabels() {
+        int selectedIndex = soulSelectorSpinner.getSelectedItemPosition();
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                buildSoulProfileLabels()
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        soulSelectorSpinner.setAdapter(adapter);
+        suppressSoulSelectorCallback = true;
+        soulSelectorSpinner.setSelection(Math.max(selectedIndex, 0), false);
+        suppressSoulSelectorCallback = false;
+    }
+
+    /**
+     * 让主页面下拉框和当前持久化的 soul_id 保持一致；遇到非内置值时回退到默认中文女生。
+     */
+    private void syncSoulSelectorSelection() {
+        int selectedIndex = findSoulProfileIndex(AppPrefs.getSoulId(this));
+        boolean shouldPersistSelection = selectedIndex < 0;
+        if (selectedIndex < 0) {
+            selectedIndex = 0;
+        }
+        suppressSoulSelectorCallback = true;
+        soulSelectorSpinner.setSelection(selectedIndex, false);
+        suppressSoulSelectorCallback = false;
+        applySoulSelection(selectedIndex, shouldPersistSelection);
+    }
+
+    /**
+     * 应用当前选中的内置元神；需要持久化时同步写回 AppPrefs，保证后续 Connect 使用同一角色。
+     */
+    private void applySoulSelection(int index, boolean persistSelection) {
+        if (index < 0 || index >= BUILT_IN_SOUL_PROFILES.length) {
+            return;
+        }
+        SoulProfile soulProfile = BUILT_IN_SOUL_PROFILES[index];
+        if (!persistSelection) {
+            return;
+        }
+        if (TextUtils.equals(AppPrefs.getSoulId(this), soulProfile.soulId)) {
+            return;
+        }
+        AppPrefs.setSoulId(this, soulProfile.soulId);
+        appendLog("[UI] 当前角色=" + getString(soulProfile.labelResId) + " soulId=" + soulProfile.soulId);
+    }
+
+    /**
+     * 当前角色是否为日文角色；主页面示例文本和提示文案会跟随语言切换。
+     */
+    private boolean isCurrentSoulJapanese() {
+        int selectedIndex = soulSelectorSpinner.getSelectedItemPosition();
+        if (selectedIndex < 0 || selectedIndex >= BUILT_IN_SOUL_PROFILES.length) {
+            selectedIndex = findSoulProfileIndex(AppPrefs.getSoulId(this));
+        }
+        return selectedIndex == 2 || selectedIndex == 3;
+    }
+
+    /**
+     * 在四个内置元神中查找当前 soul_id 对应的下标。
+     */
+    private int findSoulProfileIndex(@NonNull String soulId) {
+        for (int index = 0; index < BUILT_IN_SOUL_PROFILES.length; index++) {
+            if (TextUtils.equals(BUILT_IN_SOUL_PROFILES[index].soulId, soulId)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /**
@@ -578,10 +778,12 @@ public class MainActivity extends AppCompatActivity {
         container.setPadding(padding, dp(16), padding, 0);
 
         EditText inputEdit = new EditText(this);
-        inputEdit.setHint(getString(R.string.text_input_hint));
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        inputEdit.setHint(getLocalizedText(R.string.text_input_hint, R.string.text_input_hint_ja, demoLanguage));
         inputEdit.setMinLines(4);
         inputEdit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        inputEdit.setText(AppPrefs.getLastSendText(this));
+        boolean japanese = isCurrentSoulJapanese();
+        inputEdit.setText(AppPrefs.getLastSendText(this, japanese));
         container.addView(inputEdit, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -589,7 +791,7 @@ public class MainActivity extends AppCompatActivity {
 
         CheckBox interruptCheckBox = new CheckBox(this);
         interruptCheckBox.setChecked(true);
-        interruptCheckBox.setText(getString(R.string.interrupt_true));
+        interruptCheckBox.setText(getLocalizedText(R.string.interrupt_true, R.string.interrupt_true_ja, demoLanguage));
         LinearLayout.LayoutParams checkBoxParams = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT
@@ -598,20 +800,20 @@ public class MainActivity extends AppCompatActivity {
         container.addView(interruptCheckBox, checkBoxParams);
 
         AlertDialog dialog = new AlertDialog.Builder(this)
-                .setTitle(getString(R.string.text_input))
+                .setTitle(getLocalizedText(R.string.text_input, R.string.text_input_ja, demoLanguage))
                 .setView(container)
                 .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(getString(R.string.send_text), null)
+                .setPositiveButton(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage), null)
                 .create();
 
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String text = inputEdit.getText().toString();
             boolean interrupt = interruptCheckBox.isChecked();
             if (text.trim().isEmpty()) {
-                inputEdit.setError("请输入要发送的文本");
+                inputEdit.setError(getLocalizedText(R.string.text_input_empty_error, R.string.text_input_empty_error_ja, demoLanguage));
                 return;
             }
-            AppPrefs.setLastSendText(this, text);
+            AppPrefs.setLastSendText(this, japanese, text);
             String clientInputId = nextClientInputId();
             appendLog("[用户输入] " + text.trim() + " interrupt=" + interrupt + " clientInputId=" + clientInputId);
             sessionExecutor.execute(() -> runSendText(text, interrupt, clientInputId));
@@ -733,16 +935,21 @@ public class MainActivity extends AppCompatActivity {
     private void updateActionButtons(@NonNull SessionState state) {
         currentSessionState = state;
         runOnUiThread(() -> {
+            String demoLanguage = AppPrefs.getDemoLanguage(this);
             if (state == SessionState.CONNECTED) {
-                connectButton.setText(R.string.disconnect);
+                connectButton.setText(getLocalizedText(R.string.disconnect, R.string.disconnect_ja, demoLanguage));
                 connectButton.setEnabled(true);
             } else {
-                connectButton.setText(R.string.connect);
+                connectButton.setText(getLocalizedText(R.string.connect, R.string.connect_ja, demoLanguage));
                 connectButton.setEnabled(state == SessionState.DISCONNECTED);
             }
-            listenButton.setText(listening ? R.string.stop_listen : R.string.start_listen);
+            listenButton.setText(listening
+                    ? getLocalizedText(R.string.stop_listen, R.string.stop_listen_ja, demoLanguage)
+                    : getLocalizedText(R.string.start_listen, R.string.start_listen_ja, demoLanguage));
             listenButton.setEnabled(state == SessionState.CONNECTED && !listenActionRunning);
             sendTextButton.setEnabled(state == SessionState.CONNECTED);
+            sendTextButton.setText(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage));
+            soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
             sendTextButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
@@ -891,5 +1098,26 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private static String displayValue(Number value) {
         return value == null ? "-" : String.valueOf(value);
+    }
+
+    /**
+     * 根据当前 Demo 语言返回对应文案。
+     */
+    @NonNull
+    private String getLocalizedText(int zhResId, int jaResId, @NonNull String language) {
+        return AppPrefs.DEMO_LANGUAGE_JA.equals(language) ? getString(jaResId) : getString(zhResId);
+    }
+
+    /**
+     * 主页面内置角色项，只收口展示名和 soul_id 映射。
+     */
+    private static final class SoulProfile {
+        final int labelResId;
+        final String soulId;
+
+        SoulProfile(int labelResId, @NonNull String soulId) {
+            this.labelResId = labelResId;
+            this.soulId = soulId;
+        }
     }
 }

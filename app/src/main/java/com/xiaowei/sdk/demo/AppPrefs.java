@@ -48,10 +48,16 @@ final class AppPrefs {
     private static final String DEFAULT_LOGICAL_CLIENT_ID = "sdk.demo.client-001";
 
     private static final String KEY_LAST_SEND_TEXT = "last_send_text";
+    private static final String KEY_LAST_SEND_TEXT_ZH = "last_send_text_zh";
+    private static final String KEY_LAST_SEND_TEXT_JA = "last_send_text_ja";
     private static final String LEGACY_KEY_SEND_TEXT = "send_text";
-    private static final String DEFAULT_LAST_SEND_TEXT = "你好，讲个故事。";
+    private static final String DEFAULT_LAST_SEND_TEXT_ZH = "你好，讲个故事。";
+    private static final String DEFAULT_LAST_SEND_TEXT_JA = "こんにちは。物語をひとつ聞かせてください。";
 
     private static final String KEY_TTS_PLAYBACK_STRATEGY = "tts_playback_strategy";
+    private static final String KEY_DEMO_LANGUAGE = "demo_language";
+    static final String DEMO_LANGUAGE_ZH = "zh";
+    static final String DEMO_LANGUAGE_JA = "ja";
     static final String TTS_PLAYBACK_STRATEGY_DUCK_OTHERS = "duck_others";
     static final String TTS_PLAYBACK_STRATEGY_PAUSE_OTHERS = "pause_others";
     static final String TTS_PLAYBACK_STRATEGY_MIX_WITH_OTHERS = "mix_with_others";
@@ -252,6 +258,21 @@ final class AppPrefs {
     }
 
     /**
+     * 读取 Demo 主页面展示语言；默认中文。
+     */
+    @NonNull
+    static String getDemoLanguage(@NonNull Context context) {
+        return normalizeDemoLanguage(getConfigString(context, KEY_DEMO_LANGUAGE, DEMO_LANGUAGE_ZH));
+    }
+
+    /**
+     * 保存 Demo 主页面展示语言。
+     */
+    static void setDemoLanguage(@NonNull Context context, @NonNull String value) {
+        putString(context, KEY_DEMO_LANGUAGE, normalizeDemoLanguage(value));
+    }
+
+    /**
      * 把持久化值转换成更适合展示和日志排查的策略名称。
      */
     @NonNull
@@ -272,24 +293,28 @@ final class AppPrefs {
      * 第一次启动时使用默认值；一旦用户自己清空并保存，也要保留这个空值，不能再次强行回填默认文案。
      */
     @NonNull
-    static String getLastSendText(@NonNull Context context) {
+    static String getLastSendText(@NonNull Context context, boolean japanese) {
         migrateLegacyLastSendTextIfNeeded(context);
-        return getDraftString(context, KEY_LAST_SEND_TEXT, DEFAULT_LAST_SEND_TEXT);
+        return getDraftString(
+                context,
+                japanese ? KEY_LAST_SEND_TEXT_JA : KEY_LAST_SEND_TEXT_ZH,
+                japanese ? DEFAULT_LAST_SEND_TEXT_JA : DEFAULT_LAST_SEND_TEXT_ZH
+        );
     }
 
     /**
      * 暴露当前默认文本，供历史遗留代码复用同一份默认值。
      */
     @NonNull
-    static String defaultLastSendText() {
-        return DEFAULT_LAST_SEND_TEXT;
+    static String defaultLastSendText(boolean japanese) {
+        return japanese ? DEFAULT_LAST_SEND_TEXT_JA : DEFAULT_LAST_SEND_TEXT_ZH;
     }
 
     /**
      * 保存主页面最后一次文本输入。
      */
-    static void setLastSendText(@NonNull Context context, @NonNull String value) {
-        putString(context, KEY_LAST_SEND_TEXT, normalizeDraftText(value));
+    static void setLastSendText(@NonNull Context context, boolean japanese, @NonNull String value) {
+        putString(context, japanese ? KEY_LAST_SEND_TEXT_JA : KEY_LAST_SEND_TEXT_ZH, normalizeDraftText(value));
     }
 
     /**
@@ -321,15 +346,23 @@ final class AppPrefs {
      */
     private static void migrateLegacyLastSendTextIfNeeded(@NonNull Context context) {
         SharedPreferences preferences = getPreferences(context);
+        if (preferences.contains(KEY_LAST_SEND_TEXT_ZH) || preferences.contains(KEY_LAST_SEND_TEXT_JA)) {
+            return;
+        }
         if (preferences.contains(KEY_LAST_SEND_TEXT)) {
+            String value = preferences.getString(KEY_LAST_SEND_TEXT, DEFAULT_LAST_SEND_TEXT_ZH);
+            preferences.edit()
+                    .putString(KEY_LAST_SEND_TEXT_ZH, value == null ? "" : value)
+                    .remove(KEY_LAST_SEND_TEXT)
+                    .apply();
             return;
         }
         SharedPreferences legacyPreferences = context.getSharedPreferences(LEGACY_PREFS, Context.MODE_PRIVATE);
         if (!legacyPreferences.contains(LEGACY_KEY_SEND_TEXT)) {
             return;
         }
-        String legacyValue = legacyPreferences.getString(LEGACY_KEY_SEND_TEXT, DEFAULT_LAST_SEND_TEXT);
-        preferences.edit().putString(KEY_LAST_SEND_TEXT, legacyValue == null ? "" : legacyValue).apply();
+        String legacyValue = legacyPreferences.getString(LEGACY_KEY_SEND_TEXT, DEFAULT_LAST_SEND_TEXT_ZH);
+        preferences.edit().putString(KEY_LAST_SEND_TEXT_ZH, legacyValue == null ? "" : legacyValue).apply();
     }
 
     /**
@@ -369,6 +402,14 @@ final class AppPrefs {
             return TTS_PLAYBACK_STRATEGY_MIX_WITH_OTHERS;
         }
         return TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
+    }
+
+    /**
+     * 归一化 Demo 展示语言，当前只支持中文和日文。
+     */
+    @NonNull
+    private static String normalizeDemoLanguage(@NonNull String value) {
+        return DEMO_LANGUAGE_JA.equals(value.trim()) ? DEMO_LANGUAGE_JA : DEMO_LANGUAGE_ZH;
     }
 
     /**
