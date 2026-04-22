@@ -12,7 +12,7 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.xiaowei.sdk.sessioncore.PcmFrame;
+import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
 
 import java.util.Arrays;
 import java.util.concurrent.LinkedBlockingDeque;

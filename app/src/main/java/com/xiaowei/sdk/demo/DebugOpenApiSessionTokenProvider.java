@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.xiaowei.sdk.sessioncore.SessionTokenProvider;
+import vip.xiaoweisoul.sdk.sessioncore.SessionTokenProvider;
 
 import java.io.IOException;
 
