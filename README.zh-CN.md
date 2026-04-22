@@ -1,8 +1,10 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `com.xiaowei.sdk:session-core:1.0.6`，并跑通最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.6`，并跑通最小会话闭环。
 
-这个仓库本身不内置 SDK 二进制产物。运行前，请先把你拿到的 `xiaowei-sdk-android-1.0.6-maven-repo.zip` 解压到仓库根目录下的 `local-sdk-repo/`。
+默认情况下，这个 Demo 会直接通过 `mavenCentral()` 解析 SDK，不需要你手工下载 SDK zip，也不需要登录任何平台。
+
+如果你正在联调尚未上架 Central 的本地 SDK，也可以显式启用 `local-sdk-repo/` 回退模式。
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview 
 
@@ -22,25 +24,41 @@
 ## 目录说明
 
 - `app/`：Demo Android 应用模块
-- `local-sdk-repo/`：本地 Maven 仓库目录，默认不提交到 Git
+- `local-sdk-repo/`：本地 Maven 仓库目录，仅在显式启用 `-PuseLocalSdkRepo=true` 时使用
 
 ## 使用前准备
 
-### 1. 准备 SDK 本地 Maven 仓库
+### 1. 默认使用 Maven Central
 
-把你拿到的压缩包解压到仓库根目录：
+如果 SDK 已经发布到 Maven Central，直接构建即可，不需要额外准备本地仓库。
+
+### 2. 可选：切换到本地 Maven 仓库
+
+如果你正在验证本地尚未发布的 SDK，请先在 SDK 仓库执行：
+
+```bash
+./build_android_sdk.sh
+```
+
+然后确认本仓库根目录存在：
 
 ```text
 xiaowei-sdk-android-demo/
   local-sdk-repo/
-    com/
-      xiaowei/
+    vip/
+      xiaoweisoul/
         sdk/
           session-core/
             1.0.6/
 ```
 
-如果目录不对，Gradle 会在构建时直接报错。
+命令行构建时显式加上：
+
+```bash
+./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
+```
+
+如果目录不对，Gradle 会直接报错。
 
 ### 2. 准备连接参数
 
@@ -82,7 +100,11 @@ Demo 运行时需要你自己填写以下参数：
 ./gradlew :app:assembleDebug
 ```
 
-如果你还没有把 SDK zip 解压到 `local-sdk-repo/`，构建会直接失败，并提示你先放置本地 Maven 仓库。
+如果你需要联调本地 SDK，请改用：
+
+```bash
+./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
+```
 
 ## 快速体验
 
@@ -172,9 +194,9 @@ Demo 运行时需要你自己填写以下参数：
 - 由业务服务端安全地下发短期 `session token`
 - SDK 再通过 `SessionTokenProvider` 使用这个 token 建连
 
-### 2. 这个 Demo 默认使用本地 Maven 仓库方式接入 SDK
+### 2. 这个 Demo 默认使用 Maven Central 接入 SDK
 
-它的目标是尽量贴近真实客户接入方式，而不是依赖源码模块或私有工程路径。
+只有在你显式传入 `-PuseLocalSdkRepo=true` 时，才会回退到仓库根目录下的 `local-sdk-repo/`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -190,13 +212,13 @@ Demo 运行时需要你自己填写以下参数：
 
 ## 常见问题
 
-### 构建时报找不到 `com.xiaowei.sdk:session-core:1.0.6`
+### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.6`
 
 请检查：
 
-- `local-sdk-repo/` 是否存在
-- 目录结构是否完整
-- 是否确实包含 `com/xiaowei/sdk/session-core/1.0.6/`
+- Maven Central 上是否已经发布该版本
+- 当前网络是否能访问 Maven Central
+- 如果你启用了 `-PuseLocalSdkRepo=true`，再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.6/`
 
 ### 点击 Connect 后失败
 

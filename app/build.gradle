@@ -2,7 +2,9 @@ apply plugin: "com.android.application"
 
 def sdkArtifactName = "xiaowei-session-core"
 def sdkVersion = "1.0.6"
-def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "com/xiaowei/sdk/session-core/${sdkVersion}")
+def sdkGroupId = "vip.xiaoweisoul.sdk"
+def useLocalSdkRepo = (findProperty("useLocalSdkRepo") ?: "false").toString().toBoolean()
+def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
 
 android {
     namespace "com.xiaowei.sdk.demo"
@@ -15,6 +17,7 @@ android {
         versionCode 107
         versionName "1.0.7"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
         buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""
         buildConfigField "String", "SDK_VERSION_NAME", "\"${sdkVersion}\""
     }
@@ -39,12 +42,12 @@ android {
     }
 }
 
-if (!localSdkRepoVersionDir.exists()) {
-    throw new GradleException("Missing local SDK Maven repo: ${localSdkRepoVersionDir.absolutePath}. Please unzip xiaowei-sdk-android-1.0.6-maven-repo.zip into ./local-sdk-repo first.")
+if (useLocalSdkRepo && !localSdkRepoVersionDir.exists()) {
+    throw new GradleException("Missing local SDK Maven repo: ${localSdkRepoVersionDir.absolutePath}. Please run ../xiaowei-sdk-android/build_android_sdk.sh first or disable -PuseLocalSdkRepo.")
 }
 
 dependencies {
-    implementation "com.xiaowei.sdk:session-core:${sdkVersion}"
+    implementation "${sdkGroupId}:session-core:${sdkVersion}"
     implementation "androidx.core:core:1.13.1"
     implementation "androidx.appcompat:appcompat:1.7.0"
     implementation "com.google.android.material:material:1.12.0"
