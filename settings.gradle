@@ -11,14 +11,14 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
+        def usePublishedSdk = (gradle.startParameter.projectProperties.get("usePublishedSdk") ?: "false").toString().toBoolean()
+        if (!usePublishedSdk) {
+            maven { url = uri("local-sdk-repo") }
+        }
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/public' }
         google()
         mavenCentral()
-        def useLocalSdkRepo = (gradle.startParameter.projectProperties.get("useLocalSdkRepo") ?: "false").toString().toBoolean()
-        if (useLocalSdkRepo) {
-            maven { url = uri("local-sdk-repo") }
-        }
     }
 }
 

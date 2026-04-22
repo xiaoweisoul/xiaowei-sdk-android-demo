@@ -3,7 +3,7 @@ apply plugin: "com.android.application"
 def sdkArtifactName = "xiaowei-session-core"
 def sdkVersion = "1.0.6"
 def sdkGroupId = "vip.xiaoweisoul.sdk"
-def useLocalSdkRepo = (findProperty("useLocalSdkRepo") ?: "false").toString().toBoolean()
+def usePublishedSdk = (findProperty("usePublishedSdk") ?: "false").toString().toBoolean()
 def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
 
 android {
@@ -42,8 +42,8 @@ android {
     }
 }
 
-if (useLocalSdkRepo && !localSdkRepoVersionDir.exists()) {
-    throw new GradleException("Missing local SDK Maven repo: ${localSdkRepoVersionDir.absolutePath}. Please run ../xiaowei-sdk-android/build_android_sdk.sh first or disable -PuseLocalSdkRepo.")
+if (!usePublishedSdk && !localSdkRepoVersionDir.exists()) {
+    throw new GradleException("Missing local SDK Maven repo: ${localSdkRepoVersionDir.absolutePath}. Please run ../xiaowei-sdk-android/build_android_sdk.sh first or enable -PusePublishedSdk=true.")
 }
 
 dependencies {
