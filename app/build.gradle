@@ -5,10 +5,30 @@ def sdkVersion = "1.0.7"
 def sdkGroupId = "vip.xiaoweisoul.sdk"
 def useLocalSdkRepo = (findProperty("useLocalSdkRepo") ?: "false").toString().toBoolean()
 def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
+def demoSigningPropertiesFile = rootProject.file("signing/demo-release.properties")
+def demoSigningProperties = new Properties()
+
+if (demoSigningPropertiesFile.exists()) {
+    demoSigningPropertiesFile.withInputStream { input ->
+        demoSigningProperties.load(input)
+    }
+}
 
 android {
     namespace "vip.xiaoweisoul.sdk.demo"
     compileSdk 34
+
+    signingConfigs {
+        release {
+            if (!demoSigningPropertiesFile.exists()) {
+                throw new GradleException("Missing demo signing properties: ${demoSigningPropertiesFile.absolutePath}")
+            }
+            storeFile rootProject.file(demoSigningProperties.getProperty("storeFile"))
+            storePassword demoSigningProperties.getProperty("storePassword")
+            keyAlias demoSigningProperties.getProperty("keyAlias")
+            keyPassword demoSigningProperties.getProperty("keyPassword")
+        }
+    }
 
     defaultConfig {
         applicationId "vip.xiaoweisoul.sdk.demo"
@@ -28,6 +48,7 @@ android {
         }
         release {
             minifyEnabled false
+            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
         }
     }
