@@ -11,9 +11,17 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        def usePublishedSdk = (gradle.startParameter.projectProperties.get("usePublishedSdk") ?: "false").toString().toBoolean()
-        if (!usePublishedSdk) {
+        def useLocalSdkRepo = (gradle.startParameter.projectProperties.get("useLocalSdkRepo") ?: "false").toString().toBoolean()
+        if (useLocalSdkRepo) {
             maven { url = uri("local-sdk-repo") }
+        }
+        exclusiveContent {
+            forRepository {
+                maven { url = uri("https://repo.maven.apache.org/maven2") }
+            }
+            filter {
+                includeGroup("vip.xiaoweisoul.sdk")
+            }
         }
         maven { url 'https://maven.aliyun.com/repository/google' }
         maven { url 'https://maven.aliyun.com/repository/public' }

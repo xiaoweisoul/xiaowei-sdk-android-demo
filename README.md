@@ -11,4 +11,4 @@ Please choose your language.
 
 默认依赖坐标：`vip.xiaoweisoul.sdk:session-core:1.0.7`
 
-默认通过仓库根目录下的 `local-sdk-repo/` 拉取；仅在显式传入 `-PusePublishedSdk=true` 时切换到 `mavenCentral()`。
+默认通过 `mavenCentral()` 拉取；仅在显式传入 `-PuseLocalSdkRepo=true` 时切换到仓库根目录下的 `local-sdk-repo/`。
