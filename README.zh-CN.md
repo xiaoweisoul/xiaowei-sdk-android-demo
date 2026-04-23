@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.6`，并跑通最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.7`，并跑通最小会话闭环。
 
 默认情况下，这个 Demo 会优先通过仓库根目录下的 `local-sdk-repo/` 解析 SDK，方便你在 Central 尚未放行时继续联调。
 
@@ -45,7 +45,7 @@ xiaowei-sdk-android-demo/
       xiaoweisoul/
         sdk/
           session-core/
-            1.0.6/
+            1.0.7/
 ```
 
 默认本地模式下，直接执行：
@@ -216,11 +216,11 @@ Demo 运行时需要你自己填写以下参数：
 
 ## 常见问题
 
-### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.6`
+### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.7`
 
 请检查：
 
-- 默认本地模式下，`local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.6/`
+- 默认本地模式下，`local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.7/`
 - 如果你启用了 `-PusePublishedSdk=true`，再检查 Maven Central 上是否已经发布该版本，以及当前网络是否能访问 Maven Central
 
 ### 点击 Connect 后失败
