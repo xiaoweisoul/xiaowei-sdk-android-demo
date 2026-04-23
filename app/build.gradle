@@ -7,15 +7,15 @@ def useLocalSdkRepo = (findProperty("useLocalSdkRepo") ?: "false").toString().to
 def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
 
 android {
-    namespace "com.xiaowei.sdk.demo"
+    namespace "vip.xiaoweisoul.sdk.demo"
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.xiaowei.sdk.demo"
+        applicationId "vip.xiaoweisoul.sdk.demo"
         minSdk 26
         targetSdk 34
-        versionCode 107
-        versionName "1.0.7"
+        versionCode 200
+        versionName "2.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
         buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""

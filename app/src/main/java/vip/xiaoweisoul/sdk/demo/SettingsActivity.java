@@ -1,4 +1,4 @@
-package com.xiaowei.sdk.demo;
+package vip.xiaoweisoul.sdk.demo;
 
 import android.os.Bundle;
 import android.widget.Button;

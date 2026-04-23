@@ -1,4 +1,4 @@
-package com.xiaowei.sdk.demo;
+package vip.xiaoweisoul.sdk.demo;
 
 import androidx.annotation.NonNull;
 
