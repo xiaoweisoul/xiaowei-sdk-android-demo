@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android アプリへの SDK 組み込みを確認するためのサンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.7` をアプリに統合し、最小構成で会話セッションを接続する流れを確認できます。
+本リポジトリは、Android アプリへの SDK 組み込みを確認するためのサンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.8` をアプリに統合し、最小構成で会話セッションを接続する流れを確認できます。
 
 デフォルトでは、この Demo は `mavenCentral()` から SDK を解決します。ローカル SDK を明示的に使いたい場合だけ、ビルド時に `-PuseLocalSdkRepo=true` を指定してください。
 
@@ -12,7 +12,9 @@
 - `XiaoweiSessionClient` の生成方法
 - 接続パラメータと session token 取得ロジックの設定例
 - 接続、テキスト送信、録音開始、イベント受信までの基本フロー
-- ローカルツール登録とツール呼び出しイベントの確認
+- メイン画面の言語切り替え、4 つの内蔵元神切り替え、ログ確認の流れ
+- 録音前処理ステータスの起動前プレビュー/録音中チェック、Assistant PCM 再生の確認
+- ローカルツール登録、表情アニメーション表示、ツール呼び出しイベントの確認
 
 SDK を組み込むこと自体が目的であれば、この Demo を直接改造する必要はありません。通常は次の順番で確認することを推奨します。
 
@@ -45,7 +47,7 @@ xiaowei-sdk-android-demo/
       xiaoweisoul/
         sdk/
           session-core/
-            1.0.7/
+            1.0.8/
 ```
 
 その上で、次のようにローカル SDK モードを明示指定します。
@@ -112,7 +114,7 @@ Demo の実行には、次のパラメータが必要です。
 
 自分専用のアプリ、API Key、元神情報を閲覧・作成・管理したい場合は、サポートへ連絡してアカウント登録と権限開通を行い、自分の管理コンソールで設定してください。
 
-これらのデフォルト値は `app/src/main/java/com/xiaowei/sdk/demo/AppPrefs.java` に定義されており、設定画面の各フィールドに自動反映されます。
+これらのデフォルト値は `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` に定義されており、設定画面の各フィールドに自動反映されます。
 
 設定画面でクイック体験に関係する主な項目は次の通りです。
 
@@ -146,15 +148,18 @@ Demo の実行には、次のパラメータが必要です。
 メイン画面では次の操作ができます。
 
 - 現在の SDK 名称とバージョンを確認する
+- 表示言語を切り替える（中国語 / 日本語）
 - 設定画面を開いて接続パラメータを入力する
+- 内蔵セレクタで 4 つのデフォルト元神をすばやく切り替える
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
 - `Send Text`
-- セッション状態とログ出力を確認する
+- ログをクリアし、セッション状態とログ出力を確認する
+- 録音前処理ログ、MCP ツール呼び出しログ、表情アニメーションの反映を確認する
 
 ### 設定画面
 
-設定画面では接続パラメータを保存します。`Save` を押すと、次回メイン画面で `Connect` した際にその値がそのまま使用されます。
+設定画面では接続パラメータと TTS 再生方針を保存し、`Restore Defaults` で公開デフォルト値へ戻せます。`Save` を押すと、次回メイン画面で `Connect` した際にその値がそのまま使用されます。
 
 この Demo は設定をローカルの `SharedPreferences` に保存するため、繰り返しテストしやすくなっています。
 
@@ -164,13 +169,13 @@ Demo の実行には、次のパラメータが必要です。
 
 初めて組み込む場合は、次の順番でコードを見ることを推奨します。
 
-1. `app/src/main/java/com/xiaowei/sdk/demo/MainActivity.java`
-2. `app/src/main/java/com/xiaowei/sdk/demo/AppPrefs.java`
-3. `app/src/main/java/com/xiaowei/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+1. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
+2. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
+3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
 
 それぞれの役割は次の通りです。
 
-- `MainActivity.java`: 接続、録音、テキスト送信、イベント監視の基本フロー
+- `MainActivity.java`: 接続、録音、テキスト送信、言語切り替え、元神切り替え、イベント監視、ローカルツール登録、ログ確認の基本フロー
 - `AppPrefs.java`: 接続パラメータ管理
 - `DebugOpenApiSessionTokenProvider.java`: サンプル内での `session token` 取得例
 
@@ -196,14 +201,14 @@ Demo の実行には、次のパラメータが必要です。
 
 ## よくある質問
 
-### ビルド時に `vip.xiaoweisoul.sdk:session-core:1.0.7` が見つからない
+### ビルド時に `vip.xiaoweisoul.sdk:session-core:1.0.8` が見つからない
 
 次を確認してください。
 
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` を付けている場合は `local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.0.7/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.0.8/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 

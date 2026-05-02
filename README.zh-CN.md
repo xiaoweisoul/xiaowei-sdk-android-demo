@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.7`，并跑通最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.8`，并跑通最小会话闭环。
 
 默认情况下，这个 Demo 会优先通过 `mavenCentral()` 解析 SDK。
 
@@ -14,7 +14,9 @@
 - 演示如何创建 `XiaoweiSessionClient`
 - 演示如何配置连接参数和 session token 获取逻辑
 - 演示如何连接、发送文本、打开收音、接收事件回调
-- 演示如何注册本地工具并观察工具调用事件
+- 演示主页面语言切换、四个内置元神快速切换与日志排查流程
+- 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
+- 演示如何注册本地工具、触发表情动画并观察工具调用事件
 
 如果你只是想接 SDK，不一定需要直接修改这个 Demo。通常更推荐：
 
@@ -53,7 +55,7 @@ xiaowei-sdk-android-demo/
       xiaoweisoul/
         sdk/
           session-core/
-            1.0.7/
+            1.0.8/
 ```
 
 然后在本仓库显式启用本地模式：
@@ -124,7 +126,7 @@ Demo 运行时需要你自己填写以下参数：
 
 如果你希望查看、创建或维护自己的应用、API Key 和元神信息，需要联系客服注册账号并开通对应权限，然后在你自己的控制台中完成配置。
 
-这些默认值统一定义在 `app/src/main/java/com/xiaowei/sdk/demo/AppPrefs.java` 中，并会回填到设置页对应字段。
+这些默认值统一定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` 中，并会回填到设置页对应字段。
 
 设置页里与快速体验直接相关的字段和值如下：
 
@@ -158,15 +160,18 @@ Demo 运行时需要你自己填写以下参数：
 主页面提供以下能力：
 
 - 查看当前 SDK 名称和版本
+- 切换主页面展示语言（中文 / 日文）
 - 打开设置页填写连接参数
+- 使用内置下拉框快速切换四个默认元神
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
 - `Send Text`
-- 查看会话状态和日志输出
+- 清空日志、查看会话状态和日志输出
+- 观察平台效果器状态日志、MCP 工具调用日志与表情动画反馈
 
 ### 设置页
 
-设置页用于保存连接参数。点击 `Save` 后，主页面下一次 `Connect` 会直接读取这些值。
+设置页用于保存连接参数、TTS 播放策略，并支持 `Restore Defaults` 恢复公开默认值。点击 `Save` 后，主页面下一次 `Connect` 会直接读取这些值。
 
 这个 Demo 会把配置保存在本地 `SharedPreferences` 中，方便重复测试。
 
@@ -176,13 +181,13 @@ Demo 运行时需要你自己填写以下参数：
 
 如果你是第一次接入，建议按下面顺序看代码：
 
-1. `app/src/main/java/com/xiaowei/sdk/demo/MainActivity.java`
-2. `app/src/main/java/com/xiaowei/sdk/demo/AppPrefs.java`
-3. `app/src/main/java/com/xiaowei/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+1. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
+2. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
+3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
 
 其中：
 
-- `MainActivity.java`：展示连接、收音、发文本、事件监听的完整流程
+- `MainActivity.java`：展示连接、收音、发文本、语言切换、元神切换、事件监听、本地工具注册和日志排查的完整流程
 - `AppPrefs.java`：展示如何管理连接参数
 - `DebugOpenApiSessionTokenProvider.java`：展示如何在示例工程中获取 `session token`
 
@@ -216,12 +221,12 @@ Demo 运行时需要你自己填写以下参数：
 
 ## 常见问题
 
-### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.7`
+### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.8`
 
 请检查：
 
 - 默认模式下，检查 Maven Central 上是否已经发布该版本，以及当前网络是否能访问 Maven Central
-- 如果你启用了 `-PuseLocalSdkRepo=true`，再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.7/`
+- 如果你启用了 `-PuseLocalSdkRepo=true`，再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.8/`
 
 ### 点击 Connect 后失败
 
