@@ -179,15 +179,31 @@ final class AssistantPcmPlayer {
     }
 
     /**
+     * 服务端下发强打断型 tts.stop 时，立即停掉当前播放并屏蔽旧 response 尾包。
+     */
+    void interruptAndSuppressResponseFromServer(@Nullable String responseId, @Nullable String reason) {
+        String normalizedReason = reason == null || reason.trim().isEmpty() ? "unknown" : reason.trim();
+        String normalizedResponseId = normalizeResponseId(responseId);
+        suppressResponseAndStop("[TtsPlayer] 服务端强打断 stop reason=" + normalizedReason, normalizedResponseId);
+    }
+
+    /**
      * 统一执行“屏蔽旧 response 尾包 + 本地软停止”。
      */
     private void suppressCurrentResponseAndStop(@NonNull String actionLabel) {
+        suppressResponseAndStop(actionLabel, null);
+    }
+
+    /**
+     * 统一执行“屏蔽指定 response 尾包 + 本地软停止”；若未指定，则回退到当前最新 response。
+     */
+    private void suppressResponseAndStop(@NonNull String actionLabel, @Nullable String responseIdHint) {
         if (released.get()) {
             return;
         }
         String responseId;
         synchronized (audioLock) {
-            responseId = latestAcceptedResponseId;
+            responseId = responseIdHint != null ? responseIdHint : latestAcceptedResponseId;
             suppressedResponseId = responseId;
             suppressUnknownResponseUntilNextKnown = true;
             muteAudioTrackLocked(null);

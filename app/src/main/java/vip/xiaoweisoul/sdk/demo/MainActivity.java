@@ -268,9 +268,17 @@ public class MainActivity extends AppCompatActivity {
                             + " text=" + safe(event.getText()));
                     return;
                 }
+                if (event.isInterruptiveStop()) {
+                    AssistantPcmPlayer player = assistantPcmPlayer;
+                    if (player != null) {
+                        player.interruptAndSuppressResponseFromServer(event.getResponseId(), event.getStopReason());
+                    }
+                }
                 appendLog("[服务端] [下发] 下发结束"
                         + " turnId=" + displayValue(event.getTurnId())
-                        + " responseId=" + displayValue(event.getResponseId()));
+                        + " responseId=" + displayValue(event.getResponseId())
+                        + " reason=" + displayValue(event.getStopReason())
+                        + " interruptive=" + event.isInterruptiveStop());
             }
 
             @Override
