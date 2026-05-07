@@ -1,7 +1,7 @@
 apply plugin: "com.android.application"
 
 def sdkArtifactName = "xiaowei-session-core"
-def sdkVersion = "1.0.8"
+def sdkVersion = "1.0.9"
 def sdkGroupId = "vip.xiaoweisoul.sdk"
 def useLocalSdkRepo = (findProperty("useLocalSdkRepo") ?: "false").toString().toBoolean()
 def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
@@ -34,8 +34,8 @@ android {
         applicationId "vip.xiaoweisoul.sdk.demo"
         minSdk 26
         targetSdk 34
-        versionCode 200
-        versionName "2.0.0"
+        versionCode 201
+        versionName "2.0.1"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
         buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""

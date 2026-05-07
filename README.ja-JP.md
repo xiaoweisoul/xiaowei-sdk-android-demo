@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android アプリへの SDK 組み込みを確認するためのサンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.8` をアプリに統合し、最小構成で会話セッションを接続する流れを確認できます。
+本リポジトリは、Android アプリへの SDK 組み込みを確認するためのサンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.9` をアプリに統合し、最小構成で会話セッションを接続する流れを確認できます。
 
 デフォルトでは、この Demo は `mavenCentral()` から SDK を解決します。ローカル SDK を明示的に使いたい場合だけ、ビルド時に `-PuseLocalSdkRepo=true` を指定してください。
 
@@ -47,7 +47,7 @@ xiaowei-sdk-android-demo/
       xiaoweisoul/
         sdk/
           session-core/
-            1.0.8/
+            1.0.9/
 ```
 
 その上で、次のようにローカル SDK モードを明示指定します。
@@ -201,14 +201,14 @@ Demo の実行には、次のパラメータが必要です。
 
 ## よくある質問
 
-### ビルド時に `vip.xiaoweisoul.sdk:session-core:1.0.8` が見つからない
+### ビルド時に `vip.xiaoweisoul.sdk:session-core:1.0.9` が見つからない
 
 次を確認してください。
 
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` を付けている場合は `local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.0.8/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.0.9/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 
