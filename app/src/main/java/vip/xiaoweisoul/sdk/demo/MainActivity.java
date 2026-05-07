@@ -10,7 +10,6 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.LinearLayout;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -46,10 +45,13 @@ import vip.xiaoweisoul.sdk.sessioncore.XiaoweiSessionClient;
 import vip.xiaoweisoul.sdk.sessioncore.XiaoweiSessionClients;
 
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * SDK 接入示例 Demo 主页面。
@@ -61,20 +63,13 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean ENABLE_ASSISTANT_PCM_PLAYBACK = true;
     private static final String EMPTY_TOOL_INPUT_SCHEMA_JSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
-    private static final String SOUL_ID_CHINESE_FEMALE = "soul_demo_chinese_female_chat_assistant_v1";
-    private static final String SOUL_ID_CHINESE_MALE = "soul_demo_chinese_male_chat_assistant_v1";
-    private static final String SOUL_ID_JAPANESE_FEMALE = "soul_demo_japanese_female_chat_assistant_v1";
-    private static final String SOUL_ID_JAPANESE_MALE = "soul_demo_japanese_male_chat_assistant_v1";
-    private static final SoulProfile[] BUILT_IN_SOUL_PROFILES = new SoulProfile[]{
-            new SoulProfile(R.string.soul_option_chinese_female, SOUL_ID_CHINESE_FEMALE),
-            new SoulProfile(R.string.soul_option_chinese_male, SOUL_ID_CHINESE_MALE),
-            new SoulProfile(R.string.soul_option_japanese_female, SOUL_ID_JAPANESE_FEMALE),
-            new SoulProfile(R.string.soul_option_japanese_male, SOUL_ID_JAPANESE_MALE)
-    };
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
 
     // 所有会话动作都串行提交，避免多按钮并发触发状态竞争。
     private final ExecutorService sessionExecutor = Executors.newSingleThreadExecutor();
+    // 角色列表初始化走独立线程，避免 OpenAPI 慢请求阻塞 connect/disconnect。
+    private final ExecutorService soulProfileExecutor = Executors.newSingleThreadExecutor();
+    private final AtomicInteger soulProfileLoadGeneration = new AtomicInteger();
     // Demo 通过 SDK 对外工厂获取客户端，避免依赖具体实现类。
     private final XiaoweiSessionClient sessionClient = XiaoweiSessionClients.create();
 
@@ -104,6 +99,8 @@ public class MainActivity extends AppCompatActivity {
     private boolean listening;
     private boolean listenActionRunning;
     private boolean suppressSoulSelectorCallback;
+    private boolean soulProfilesLoading;
+    private final List<SoulProfileOption> soulProfiles = new ArrayList<>();
     private SessionState currentSessionState = SessionState.DISCONNECTED;
 
     /**
@@ -135,7 +132,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         ensureAssistantPcmPlayerConfigured(true);
-        syncSoulSelectorSelection();
+        if (currentSessionState == SessionState.DISCONNECTED) {
+            refreshSoulProfilesFromOpenApi();
+        } else {
+            syncSoulSelectorSelection();
+        }
         applyDemoLanguageTexts();
     }
 
@@ -151,6 +152,7 @@ public class MainActivity extends AppCompatActivity {
             assistantPcmPlayer = null;
         }
         sessionExecutor.shutdownNow();
+        soulProfileExecutor.shutdownNow();
         super.onDestroy();
     }
 
@@ -195,7 +197,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 绑定主页面内置角色下拉框，方便公开试用时快速切换四个默认元神。
+     * 绑定主页面角色下拉框；角色项由 OpenAPI 按当前 access_key 动态初始化。
      */
     private void bindSoulSelector() {
         ArrayAdapter<String> adapter = new ArrayAdapter<>(
@@ -342,16 +344,76 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 返回四个内置元神的展示名称。
+     * 返回当前角色下拉项的展示名称。
      */
     @NonNull
     private String[] buildSoulProfileLabels() {
-        String[] labels = new String[BUILT_IN_SOUL_PROFILES.length];
-        String demoLanguage = AppPrefs.getDemoLanguage(this);
-        for (int index = 0; index < BUILT_IN_SOUL_PROFILES.length; index++) {
-            labels[index] = getLocalizedText(BUILT_IN_SOUL_PROFILES[index].labelResId, BUILT_IN_SOUL_PROFILES[index].labelResId, demoLanguage);
+        if (soulProfilesLoading) {
+            return new String[]{localizedSoulSelectorPlaceholder("角色加载中...", "キャラクターを読み込み中...")};
+        }
+        if (soulProfiles.isEmpty()) {
+            return new String[]{localizedSoulSelectorPlaceholder("暂无可用角色", "利用可能なキャラクターがありません")};
+        }
+        String[] labels = new String[soulProfiles.size()];
+        for (int index = 0; index < soulProfiles.size(); index++) {
+            labels[index] = soulProfiles.get(index).displayName();
         }
         return labels;
+    }
+
+    /**
+     * 根据当前设置中的 access_key 从 OpenAPI 刷新角色列表。
+     */
+    private void refreshSoulProfilesFromOpenApi() {
+        int generation = soulProfileLoadGeneration.incrementAndGet();
+        soulProfilesLoading = true;
+        soulProfiles.clear();
+        refreshSoulSelectorLabels();
+        updateActionButtons(currentSessionState);
+
+        soulProfileExecutor.execute(() -> {
+            try {
+                AppPrefs.ConnectionSettings settings = AppPrefs.loadConnectionSettings(this);
+                DebugOpenApiSoulProfileClient client = new DebugOpenApiSoulProfileClient(
+                        settings.openApiBaseUrl,
+                        settings.accessKeyId,
+                        settings.accessKeySecret,
+                        this::appendLog
+                );
+                List<SoulProfileOption> items = client.listSoulProfiles();
+                runOnUiThread(() -> applyLoadedSoulProfiles(generation, items, null));
+            } catch (Exception e) {
+                runOnUiThread(() -> applyLoadedSoulProfiles(generation, new ArrayList<>(), e));
+            }
+        });
+    }
+
+    /**
+     * 应用后台加载到的角色列表；过期请求直接丢弃。
+     */
+    private void applyLoadedSoulProfiles(int generation, @NonNull List<SoulProfileOption> items, Exception error) {
+        if (generation != soulProfileLoadGeneration.get()) {
+            return;
+        }
+        soulProfilesLoading = false;
+        soulProfiles.clear();
+        soulProfiles.addAll(items);
+        refreshSoulSelectorLabels();
+        if (error != null) {
+            appendLog("[SoulProfile] 角色列表加载失败: " + error.getMessage());
+        } else {
+            appendLog("[SoulProfile] 已加载角色数量=" + soulProfiles.size());
+        }
+        syncSoulSelectorSelection();
+        updateActionButtons(currentSessionState);
+    }
+
+    /**
+     * 返回角色下拉框加载/空态占位文案。
+     */
+    @NonNull
+    private String localizedSoulSelectorPlaceholder(@NonNull String zhText, @NonNull String jaText) {
+        return AppPrefs.DEMO_LANGUAGE_JA.equals(AppPrefs.getDemoLanguage(this)) ? jaText : zhText;
     }
 
     /**
@@ -416,16 +478,22 @@ public class MainActivity extends AppCompatActivity {
                 buildSoulProfileLabels()
         );
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        soulSelectorSpinner.setAdapter(adapter);
         suppressSoulSelectorCallback = true;
+        soulSelectorSpinner.setAdapter(adapter);
         soulSelectorSpinner.setSelection(Math.max(selectedIndex, 0), false);
         suppressSoulSelectorCallback = false;
     }
 
     /**
-     * 让主页面下拉框和当前持久化的 soul_id 保持一致；遇到非内置值时回退到默认中文女生。
+     * 让主页面下拉框和当前持久化的 soul_id 保持一致；遇到不存在的值时回退到第一个可用角色。
      */
     private void syncSoulSelectorSelection() {
+        if (soulProfiles.isEmpty()) {
+            suppressSoulSelectorCallback = true;
+            soulSelectorSpinner.setSelection(0, false);
+            suppressSoulSelectorCallback = false;
+            return;
+        }
         int selectedIndex = findSoulProfileIndex(AppPrefs.getSoulId(this));
         boolean shouldPersistSelection = selectedIndex < 0;
         if (selectedIndex < 0) {
@@ -438,13 +506,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 应用当前选中的内置元神；需要持久化时同步写回 AppPrefs，保证后续 Connect 使用同一角色。
+     * 应用当前选中的元神；需要持久化时同步写回 AppPrefs，保证后续 Connect 使用同一角色。
      */
     private void applySoulSelection(int index, boolean persistSelection) {
-        if (index < 0 || index >= BUILT_IN_SOUL_PROFILES.length) {
+        if (index < 0 || index >= soulProfiles.size()) {
             return;
         }
-        SoulProfile soulProfile = BUILT_IN_SOUL_PROFILES[index];
+        SoulProfileOption soulProfile = soulProfiles.get(index);
         if (!persistSelection) {
             return;
         }
@@ -452,26 +520,22 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
         AppPrefs.setSoulId(this, soulProfile.soulId);
-        appendLog("[UI] 当前角色=" + getString(soulProfile.labelResId) + " soulId=" + soulProfile.soulId);
+        appendLog("[UI] 当前角色=" + soulProfile.displayName() + " soulId=" + soulProfile.soulId);
     }
 
     /**
      * 当前角色是否为日文角色；主页面示例文本和提示文案会跟随语言切换。
      */
     private boolean isCurrentSoulJapanese() {
-        int selectedIndex = soulSelectorSpinner.getSelectedItemPosition();
-        if (selectedIndex < 0 || selectedIndex >= BUILT_IN_SOUL_PROFILES.length) {
-            selectedIndex = findSoulProfileIndex(AppPrefs.getSoulId(this));
-        }
-        return selectedIndex == 2 || selectedIndex == 3;
+        return AppPrefs.DEMO_LANGUAGE_JA.equals(AppPrefs.getDemoLanguage(this));
     }
 
     /**
-     * 在四个内置元神中查找当前 soul_id 对应的下标。
+     * 在当前角色列表中查找当前 soul_id 对应的下标。
      */
     private int findSoulProfileIndex(@NonNull String soulId) {
-        for (int index = 0; index < BUILT_IN_SOUL_PROFILES.length; index++) {
-            if (TextUtils.equals(BUILT_IN_SOUL_PROFILES[index].soulId, soulId)) {
+        for (int index = 0; index < soulProfiles.size(); index++) {
+            if (TextUtils.equals(soulProfiles.get(index).soulId, soulId)) {
                 return index;
             }
         }
@@ -957,7 +1021,7 @@ public class MainActivity extends AppCompatActivity {
             listenButton.setEnabled(state == SessionState.CONNECTED && !listenActionRunning);
             sendTextButton.setEnabled(state == SessionState.CONNECTED);
             sendTextButton.setText(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage));
-            soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED);
+            soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED && !soulProfilesLoading && !soulProfiles.isEmpty());
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
             sendTextButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
@@ -1116,16 +1180,4 @@ public class MainActivity extends AppCompatActivity {
         return AppPrefs.DEMO_LANGUAGE_JA.equals(language) ? getString(jaResId) : getString(zhResId);
     }
 
-    /**
-     * 主页面内置角色项，只收口展示名和 soul_id 映射。
-     */
-    private static final class SoulProfile {
-        final int labelResId;
-        final String soulId;
-
-        SoulProfile(int labelResId, @NonNull String soulId) {
-            this.labelResId = labelResId;
-            this.soulId = soulId;
-        }
-    }
 }
