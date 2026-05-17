@@ -34,7 +34,7 @@ android {
         applicationId "vip.xiaoweisoul.sdk.demo"
         minSdk 26
         targetSdk 34
-        versionCode 202
+        versionCode 203
         versionName "2.0.3"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
