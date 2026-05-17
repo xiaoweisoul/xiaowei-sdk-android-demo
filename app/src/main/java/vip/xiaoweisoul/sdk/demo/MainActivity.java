@@ -731,6 +731,7 @@ public class MainActivity extends AppCompatActivity {
                     settings.accessKeyId,
                     settings.accessKeySecret,
                     requireNonBlank(settings.integrationAppId, "integration_app_id"),
+                    requireNonBlank(settings.endUserId, "end_user_id"),
                     requireNonBlank(settings.soulId, "soul_id"),
                     this::appendLog
             );
@@ -746,6 +747,7 @@ public class MainActivity extends AppCompatActivity {
             appendLog("[Connect] 使用配置 openApiBaseUrl=" + settings.openApiBaseUrl
                     + " wsUrl=" + settings.wsUrl
                     + " protocolVersion=" + settings.protocolVersion
+                    + " endUserId=" + displayValue(settings.endUserId)
                     + " soulId=" + displayValue(settings.soulId));
             sessionClient.connect(config);
             appendLog("[Connect] connect() 成功！");

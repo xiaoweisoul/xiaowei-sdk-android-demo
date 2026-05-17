@@ -74,6 +74,7 @@ Demo 运行时需要你自己填写以下参数：
 - `Access Key ID`
 - `Access Key Secret`
 - `Integration App ID`
+- `End User ID`
 - `Soul ID`
 - `WS URL`
 - `Protocol Version`
@@ -84,6 +85,8 @@ Demo 运行时需要你自己填写以下参数：
 
 - `Integration App ID` 填的是控制台“应用中心”列表里展示的 `app_id`。
 - 当前值格式是字符串，例如 `app_g1ht6a8o`。
+- `End User ID` 填的是 App 侧真实终端用户的稳定唯一标识，例如 `user_10001`。
+- 如果要验证元神记忆，`End User ID` 不能多个用户共用，也不应该在同一用户身上频繁变化。
 - `Soul ID` 填的是元神配置里的稳定标识，例如 `soul_acme_companion_main_v1`。
 
 这些值不会在仓库中提供真实默认值。请使用你自己的测试环境配置。
@@ -130,26 +133,28 @@ Demo 运行时需要你自己填写以下参数：
 
 设置页里与快速体验直接相关的字段和值如下：
 
-| 设置项 | 内置值 | 说明 |
-|---|---|---|
-| `OpenAPI Base URL` | `http://api.xiaoweisoul.vip` | 内置 OpenAPI 地址 |
-| `WS URL` | `ws://soul.xiaoweisoul.vip` | 内置 WebSocket 地址 |
-| `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内置 API Key ID |
+| 设置项 | 内置值                                                   | 说明 |
+|---|-------------------------------------------------------|---|
+| `OpenAPI Base URL` | `http://api.xiaoweisoul.vip`                          | 内置 OpenAPI 地址 |
+| `WS URL` | `ws://soul.xiaoweisoul.vip`                           | 内置 WebSocket 地址 |
+| `Access Key ID` | `ak_be60d1530176d7e4b915ed9c`                         | 内置 API Key ID |
 | `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内置 API Key Secret |
-| `Integration App ID` | `app_remav935` | 内置应用 ID |
-| `Protocol Version` | `1` | 协议版本 |
-| `Logical Device ID` | `app.demo.device-001` | 默认逻辑设备 ID |
-| `Logical Client ID` | `sdk.demo.client-001` | 默认逻辑客户端 ID |
-| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 当前默认元神；也可以改成下表中的任意一个内置聊天助手元神 |
+| `Integration App ID` | `app_remav935`                                        | 内置应用 ID |
+| `End User ID` | `app_demo_end_user_001`                               | Demo 默认终端用户 ID；用于隔离应用记忆 |
+| `Protocol Version` | `1`                                                   | 协议版本 |
+| `Logical Device ID` | `app.demo.device-001`                                 | 默认逻辑设备 ID |
+| `Logical Client ID` | `sdk.demo.client-001`                                 | 默认逻辑客户端 ID |
+| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1`          | 当前默认元神；也可以改成下表中的任意一个内置聊天助手元神 |
 
 内置的 4 个聊天助手元神 `soul_id` 如下：
 
-| 元神名称 | `soul_id` |
-|---|---|
+| 元神名称       | `soul_id` |
+|------------|---|
 | 聊天助手（中文女生） | `soul_demo_chinese_female_chat_assistant_v1` |
 | 聊天助手（中文男生） | `soul_demo_chinese_male_chat_assistant_v1` |
 | 聊天助手（日文女生） | `soul_demo_japanese_female_chat_assistant_v1` |
 | 聊天助手（日文男生） | `soul_demo_japanese_male_chat_assistant_v1` |
+| 聊天助手（中日女生） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
 
 如果你想快速体验不同元神，最直接的方式就是进入设置页，只修改 `Soul ID` 字段为上面任意一个值，保存后重新连接。
 
@@ -176,6 +181,52 @@ Demo 运行时需要你自己填写以下参数：
 这个 Demo 会把配置保存在本地 `SharedPreferences` 中，方便重复测试。
 
 设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
+
+设置页里的 `End User ID` 会在每次 `Connect` 前透传给 `POST /api/open/v1/ws-session-tokens`，用于告诉服务端“这次连接代表的是哪个 App 终端用户”。
+
+## 开启记忆能力
+
+如果你希望当前 Demo 能用上 `xiaowei-server` 的应用记忆，需要同时满足“服务端已开启对应元神记忆”和“Demo 在换取 `ws_session_token` 时传入正确的 `end_user_id`”这两个条件。
+
+先理解作用域：
+
+- 设备记忆：按“设备 + 元神”隔离
+- 应用记忆：按“应用 + 元神 + end_user_id”隔离
+
+这个 Android Demo 属于应用接入场景，因此这里验证的是**应用记忆**。`end_user_id` 不是可有可无的辅助字段，而是记忆空间归属的一部分。
+
+### 操作步骤
+
+1. 在 `xiaowei-server` 侧确认已经为目标元神开启记忆能力，为了测试方便，已为当前 Demo 默认开始了元神记忆。
+2. 打开 Demo 设置页，填写正确的 `Integration App ID`、`Soul ID` 和 `End User ID`。
+3. 其中 `End User ID` 必须是你业务里能稳定标识同一个终端用户的值，例如 `user_10001`。
+4. 点击 `Save` 保存设置，再回到主页面点击 `Connect`。
+5. 使用同一个 `Integration App ID + Soul ID + End User ID` 持续对话，等待服务端在对话结束后整理长期记忆。
+6. 后续再次连接时，只要这三个值保持不变，服务端就会命中同一个应用记忆空间。
+
+### 这里的逻辑是什么
+
+当前 Demo 的连接流程是：
+
+1. 主页面点击 `Connect`
+2. Demo 先调用 OpenAPI `POST /api/open/v1/ws-session-tokens`
+3. 请求体里带上 `integration_app_id`、`soul_id`、`trace_id`、`end_user_id`
+4. 服务端据此识别当前 App 用户，并把后续会话关联到对应的应用记忆空间
+5. SDK 再拿返回的短期 `ws_session_token` 去连 WebSocket
+
+所以，记忆是否能连续命中，核心不在于“设备有没有换”，而在于下面这组键是否稳定：
+
+- `integration_app_id`
+- `soul_id`
+- `end_user_id`
+
+### 使用时要注意
+
+- 不同真实用户不要共用同一个 `End User ID`，否则记忆会串。
+- 同一个真实用户不要今天用 `user_10001`、明天改成 `user_10001_v2`，否则会被视为新的记忆空间。
+- 刚说过的话不一定会立刻在当前轮生效；记忆通常是在一段对话结束后再整理沉淀。
+- 关闭记忆表示停止继续使用和更新，不等于立刻删除历史记忆。
+- `Restore Defaults` 会把 `End User ID` 恢复成 Demo 默认值 `sdk-demo-ghtao-01`，这只适合单人联调用途。
 
 ## 推荐阅读顺序
 
@@ -236,6 +287,7 @@ Demo 运行时需要你自己填写以下参数：
 - `WS URL` 是否正确
 - `Access Key ID / Secret` 是否正确
 - `Integration App ID` 是否填写为应用中心展示的字符串 `app_id`，例如 `app_g1ht6a8o`
+- 如果要验证记忆能力，`End User ID` 是否已填写为当前真实用户的稳定唯一标识
 - `Soul ID`、`Protocol Version` 是否匹配服务端要求
 
 ### 连接成功但无法开麦
