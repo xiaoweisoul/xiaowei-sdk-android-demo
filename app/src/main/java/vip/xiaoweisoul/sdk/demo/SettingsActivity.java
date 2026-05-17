@@ -19,6 +19,7 @@ public class SettingsActivity extends AppCompatActivity {
     private EditText accessKeyIdEdit;
     private EditText accessKeySecretEdit;
     private EditText integrationAppIdEdit;
+    private EditText endUserIdEdit;
     private EditText soulIdEdit;
     private EditText protocolVersionEdit;
     private EditText logicalDeviceIdEdit;
@@ -49,6 +50,7 @@ public class SettingsActivity extends AppCompatActivity {
         accessKeyIdEdit = findViewById(R.id.edit_setting_access_key_id);
         accessKeySecretEdit = findViewById(R.id.edit_setting_access_key_secret);
         integrationAppIdEdit = findViewById(R.id.edit_setting_integration_app_id);
+        endUserIdEdit = findViewById(R.id.edit_setting_end_user_id);
         soulIdEdit = findViewById(R.id.edit_setting_soul_id);
         protocolVersionEdit = findViewById(R.id.edit_setting_protocol_version);
         logicalDeviceIdEdit = findViewById(R.id.edit_setting_logical_device_id);
@@ -68,6 +70,7 @@ public class SettingsActivity extends AppCompatActivity {
         accessKeyIdEdit.setText(AppPrefs.getAccessKeyId(this));
         accessKeySecretEdit.setText(AppPrefs.getAccessKeySecret(this));
         integrationAppIdEdit.setText(AppPrefs.getIntegrationAppId(this));
+        endUserIdEdit.setText(AppPrefs.getEndUserId(this));
         soulIdEdit.setText(AppPrefs.getSoulId(this));
         protocolVersionEdit.setText(AppPrefs.getProtocolVersion(this));
         logicalDeviceIdEdit.setText(AppPrefs.getLogicalDeviceId(this));
@@ -100,6 +103,7 @@ public class SettingsActivity extends AppCompatActivity {
         AppPrefs.setAccessKeyId(this, accessKeyIdEdit.getText().toString());
         AppPrefs.setAccessKeySecret(this, accessKeySecretEdit.getText().toString());
         AppPrefs.setIntegrationAppId(this, integrationAppIdEdit.getText().toString());
+        AppPrefs.setEndUserId(this, endUserIdEdit.getText().toString());
         AppPrefs.setSoulId(this, soulIdEdit.getText().toString());
         AppPrefs.setProtocolVersion(this, protocolVersionEdit.getText().toString());
         AppPrefs.setLogicalDeviceId(this, logicalDeviceIdEdit.getText().toString());

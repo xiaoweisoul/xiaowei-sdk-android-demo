@@ -17,7 +17,7 @@ import okhttp3.Response;
 /**
  * 仅供 Demo 示例使用的 token provider。
  * 它会直接调用 OpenAPI 用 access_key 换取 ws_session_token，不应复制到生产宿主。
- * Demo 当前不显式透传 end_user_id，统一由服务端按需要决定是否附带。
+ * Demo 会显式透传设置页中的 end_user_id，便于联调应用记忆作用域。
  */
 final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
     private static final String WS_SESSION_TOKEN_PATH = "/api/open/v1/ws-session-tokens";
@@ -39,6 +39,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
     private final String accessKeyId;
     private final String accessKeySecret;
     private final String integrationAppId;
+    private final String endUserId;
     private final String soulId;
     private final Logger logger;
 
@@ -50,6 +51,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
             @NonNull String accessKeyId,
             @NonNull String accessKeySecret,
             @NonNull String integrationAppId,
+            @NonNull String endUserId,
             @NonNull String soulId,
             @NonNull Logger logger
     ) {
@@ -58,6 +60,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
         this.accessKeyId = requireNonBlank(accessKeyId, "accessKeyId");
         this.accessKeySecret = requireNonBlank(accessKeySecret, "accessKeySecret");
         this.integrationAppId = requireNonBlank(integrationAppId, "integrationAppId");
+        this.endUserId = requireNonBlank(endUserId, "endUserId");
         this.soulId = requireNonBlank(soulId, "soulId");
         this.logger = logger;
     }
@@ -76,6 +79,9 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
         requestBodyJson.addProperty("soul_id", soulId);
         requestBodyJson.addProperty("end_user_id", "zhangsan_001");
         requestBodyJson.addProperty("trace_id", "demo-" + System.currentTimeMillis());
+
+        // 应用记忆按“应用 + 元神 + end_user_id”隔离；联调记忆能力时必须传真实且稳定的终端用户 ID。
+        requestBodyJson.addProperty("end_user_id", endUserId);
 
         Request request = new Request.Builder()
                 // 这里直接用 access_key 调 OpenAPI，仅限 Demo 示例使用。

@@ -35,6 +35,9 @@ final class AppPrefs {
     private static final String KEY_INTEGRATION_APP_ID = "integration_app_id";
     private static final String DEFAULT_INTEGRATION_APP_ID = "app_remav935";
 
+    private static final String KEY_END_USER_ID = "end_user_id";
+    private static final String DEFAULT_END_USER_ID = "app_demo_end_user_001";
+
     private static final String KEY_SOUL_ID = "soul_id";
     private static final String DEFAULT_SOUL_ID = "soul_demo_chinese_female_chat_assistant_v1";
 
@@ -80,6 +83,7 @@ final class AppPrefs {
                 getAccessKeyId(context),
                 getAccessKeySecret(context),
                 getIntegrationAppId(context),
+                getEndUserId(context),
                 getSoulId(context),
                 getProtocolVersion(context),
                 getLogicalDeviceId(context),
@@ -99,6 +103,7 @@ final class AppPrefs {
                 .remove(KEY_ACCESS_KEY_ID)
                 .remove(KEY_ACCESS_KEY_SECRET)
                 .remove(KEY_INTEGRATION_APP_ID)
+                .remove(KEY_END_USER_ID)
                 .remove(KEY_SOUL_ID)
                 .remove(KEY_PROTOCOL_VERSION)
                 .remove(KEY_LOGICAL_DEVICE_ID)
@@ -180,6 +185,21 @@ final class AppPrefs {
      */
     static void setIntegrationAppId(@NonNull Context context, @NonNull String value) {
         putString(context, KEY_INTEGRATION_APP_ID, normalizeConfigText(value, DEFAULT_INTEGRATION_APP_ID));
+    }
+
+    /**
+     * 读取 end_user_id。
+     */
+    @NonNull
+    static String getEndUserId(@NonNull Context context) {
+        return normalizeConfigText(getConfigString(context, KEY_END_USER_ID, DEFAULT_END_USER_ID), DEFAULT_END_USER_ID);
+    }
+
+    /**
+     * 保存 end_user_id。
+     */
+    static void setEndUserId(@NonNull Context context, @NonNull String value) {
+        putString(context, KEY_END_USER_ID, normalizeConfigText(value, DEFAULT_END_USER_ID));
     }
 
     /**
@@ -442,6 +462,7 @@ final class AppPrefs {
         final String accessKeyId;
         final String accessKeySecret;
         final String integrationAppId;
+        final String endUserId;
         final String soulId;
         final String protocolVersion;
         final String logicalDeviceId;
@@ -456,6 +477,7 @@ final class AppPrefs {
                 @NonNull String accessKeyId,
                 @NonNull String accessKeySecret,
                 @NonNull String integrationAppId,
+                @NonNull String endUserId,
                 @NonNull String soulId,
                 @NonNull String protocolVersion,
                 @NonNull String logicalDeviceId,
@@ -466,6 +488,7 @@ final class AppPrefs {
             this.accessKeyId = accessKeyId;
             this.accessKeySecret = accessKeySecret;
             this.integrationAppId = integrationAppId;
+            this.endUserId = endUserId;
             this.soulId = soulId;
             this.protocolVersion = protocolVersion;
             this.logicalDeviceId = logicalDeviceId;
