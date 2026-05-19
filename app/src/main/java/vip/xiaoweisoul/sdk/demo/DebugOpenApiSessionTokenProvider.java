@@ -74,6 +74,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
         JsonObject requestBodyJson = new JsonObject();
         requestBodyJson.addProperty("integration_app_id", integrationAppId);
         requestBodyJson.addProperty("soul_id", soulId);
+        requestBodyJson.addProperty("end_user_id", "zhangsan_001");
         requestBodyJson.addProperty("trace_id", "demo-" + System.currentTimeMillis());
 
         Request request = new Request.Builder()

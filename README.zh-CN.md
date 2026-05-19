@@ -8,12 +8,22 @@
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview 
 
+本文除了基本运行说明外，也会完整覆盖下面这些高频接入问题：
+
+- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` 分别代表什么
+- 一轮长回复里，多句 AI 文本和多帧 PCM 是怎么组织的
+- `barge_in` / `interrupt=true` 这种打断场景应该怎么理解
+- 为什么 `onAssistantSentence(state=stop)` 不等于本地已经播完
+- 广告插播、背景音恢复应该看什么时机
+
 ## 你能用这个 Demo 做什么
 
 - 验证 Maven Central 与本地 Maven 仓库两种接入方式
 - 演示如何创建 `XiaoweiSessionClient`
 - 演示如何配置连接参数和 session token 获取逻辑
 - 演示如何连接、发送文本、打开收音、接收事件回调
+- 演示如何理解 `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` 三类核心输出信号
+- 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、四个内置元神快速切换与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
 - 演示如何注册本地工具、触发表情动画并观察工具调用事件
@@ -169,6 +179,16 @@ Demo 运行时需要你自己填写以下参数：
 - 清空日志、查看会话状态和日志输出
 - 观察平台效果器状态日志、MCP 工具调用日志与表情动画反馈
 
+主页面日志里建议重点看下面几类标签：
+
+- `[用户输入已确认]`：服务端已经确认了当前用户输入
+- `[AI文本句子]`：当前收到一条 AI 文本句子
+- `[PCM下发]`：当前回复的首帧 PCM 已经到达
+- `[AI回复结束]`：服务端这轮回复已经结束，但不代表本地播放器已经播完
+- `[AI回复汇总]`：Demo 按 `responseId` 聚合后的完整文本预览
+- `[TtsPlayer] [本地播放开始]`：宿主本地播放链路已经启动
+- `[TtsPlayer] [本地播放收口]`：Demo 里的本地播放链路进入收口/空闲态，更接近广告切入参考时机
+
 ### 设置页
 
 设置页用于保存连接参数、TTS 播放策略，并支持 `Restore Defaults` 恢复公开默认值。点击 `Save` 后，主页面下一次 `Connect` 会直接读取这些值。
@@ -177,13 +197,415 @@ Demo 运行时需要你自己填写以下参数：
 
 设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
 
+## 输出生命周期说明
+
+这一节专门解释当前 `session-core` 在宿主侧最常见、也最容易混淆的三个输出信号：
+
+- 用户输入确认
+- AI 文本输出
+- AI 语音 PCM 下发
+
+如果你正在看 Demo 日志，或者正在接广告插播、打断、背景音恢复之类的逻辑，建议先把这节读完。
+
+### 先记住三个结论
+
+1. `onUserInputCommitted(event)` 是“用户输入被服务端正式确认”，不是 AI 回复。
+2. `onAssistantSentence(event)` 里的 `state=start` 才是 AI 文本句子输出。
+3. `onAssistantSentence(event)` 里的 `state=stop` 表示“服务端当前回复结束”，不等于“本地播放器已经播完”。
+
+### 当前对外回调怎么理解
+
+#### `onUserInputCommitted(event)`
+
+这个回调表示服务端已经接受并确认了当前用户输入。
+
+常见场景：
+
+- 用户说了一句话，ASR 最终结果确认后回调
+- 宿主主动 `sendText(...)` 后，服务端确认了这条文本输入
+
+这个事件通常用于：
+
+- 更新聊天输入区
+- 建立新的 `turnId`
+- 排查语音输入和文本输入有没有成功进入会话
+
+它不表示 AI 已经开始回答。
+
+#### `onAssistantSentence(event)`
+
+这是当前 SDK 对外暴露的 AI 文本输出主入口。
+
+它只有两种状态：
+
+- `state=start`：服务端下发了一句可展示文本，文本内容在 `event.getText()`
+- `state=stop`：服务端当前回复结束，结束原因在 `event.getStopReason()`
+
+可以把它理解成“句子级文本 + 回复结束信号”。
+
+#### `onAssistantPcm(frame)`
+
+这是 AI 语音的下行 PCM 数据回调。
+
+每次回调只是一帧音频数据，包含：
+
+- `turnId`
+- `responseId`
+- `seq`
+- `ptsUs`
+- `data`
+
+这里没有：
+
+- `finished`
+- `eof`
+- `isLastFrame`
+- 文本内容
+
+所以宿主不能指望从 `PcmFrame` 自己读出一个“这一轮语音彻底结束”的独立标志。
+
+### `turnId` 和 `responseId` 怎么看
+
+建议这样理解：
+
+- `turnId`：更偏向“这一轮用户输入 / 会话回合”
+- `responseId`：更偏向“这一轮 AI 回复流”
+
+在多数场景里，一轮 AI 回复会表现成：
+
+1. 一个 `turnId`
+2. 一个 `responseId`
+3. 多次 `onAssistantSentence(state=start)`
+4. 多次 `onAssistantPcm(frame)`
+5. 一次 `onAssistantSentence(state=stop)`
+
+如果宿主要把多句文本拼成完整回复，推荐按 `responseId` 聚合。
+
+### 苏州两日游案例
+
+下面用“帮我规划一下苏州两日游”这个长回复例子，展示当前时序。
+
+#### 正常长回复
+
+用户说：
+
+```text
+帮我规划一下苏州两日游
+```
+
+SDK 侧可以理解成：
+
+```text
+onUserInputCommitted(
+  source=asr 或 text,
+  text="帮我规划一下苏州两日游",
+  turnId=101
+)
+
+onAssistantSentence(
+  state=start,
+  index=1,
+  turnId=101,
+  responseId=resp-A,
+  text="可以，我先按两天一晚给你拆一下。"
+)
+
+onAssistantPcm(seq=0, responseId=resp-A)
+onAssistantPcm(seq=1, responseId=resp-A)
+
+onAssistantSentence(
+  state=start,
+  index=2,
+  turnId=101,
+  responseId=resp-A,
+  text="第一天建议你先去拙政园和苏州博物馆。"
+)
+
+onAssistantPcm(seq=20, responseId=resp-A)
+
+onAssistantSentence(
+  state=start,
+  index=3,
+  turnId=101,
+  responseId=resp-A,
+  text="晚上可以去平江路，吃饭和夜游都比较合适。"
+)
+
+onAssistantSentence(
+  state=stop,
+  turnId=101,
+  responseId=resp-A,
+  reason=eos
+)
+```
+
+这里有两个很重要的点：
+
+1. AI 文本不是一次整段给出，而是分多次、按句子给出。
+2. `state=stop` 收口的是“服务端这一轮回复”，不是“宿主本地播放链路”。
+
+#### 用户插话打断 `barge_in`
+
+AI 说到一半，用户插话：
+
+```text
+预算两千以内呢？
+```
+
+SDK 侧可以理解成：
+
+```text
+onAssistantSentence(
+  state=start,
+  turnId=101,
+  responseId=resp-A,
+  text="第一天建议你先去拙政园和苏州博物馆。"
+)
+
+onAssistantPcm(seq=30, responseId=resp-A)
+onAssistantPcm(seq=31, responseId=resp-A)
+
+onAssistantSentence(
+  state=stop,
+  turnId=101,
+  responseId=resp-A,
+  reason=barge_in
+)
+
+onUserInputCommitted(
+  source=asr,
+  text="预算两千以内呢？",
+  turnId=102
+)
+
+onAssistantSentence(
+  state=start,
+  turnId=102,
+  responseId=resp-B,
+  text="如果预算控制在两千以内，可以优先住在观前街附近。"
+)
+```
+
+这个例子里：
+
+- `resp-A` 是旧回复
+- `resp-B` 是新回复
+- `barge_in` 表示旧回复被新输入打断
+
+宿主如果自己实现播放器，通常还需要在本地进一步停掉旧回复的剩余尾音。
+
+### 宿主接入建议
+
+#### 如果你要展示完整 AI 回复文本
+
+推荐按 `responseId` 把多次 `state=start` 的 `text` 累积起来，等到对应的 `state=stop` 再收口。
+
+#### 如果你要做广告插播或背景音恢复
+
+不要只看 `onAssistantSentence(state=stop)`。
+
+更稳妥的做法是：
+
+1. 用 `state=stop` 判断服务端已经结束当前回复
+2. 再等宿主本地播放器真正收口
+3. 最后再切广告、恢复背景音或开始下一段本地音频
+
+#### 如果你要处理打断
+
+推荐区分两类 stop：
+
+- 正常结束：例如 `reason=eos`
+- 打断结束：例如 `barge_in`、`input_text`、`stopword`
+
+打断结束通常意味着宿主要更积极地停掉旧回复残留音频，避免尾音串到下一轮。
+
+## Assistant PCM 播放与广告插播参考
+
+这一节专门解释一个高频问题：
+
+> 为什么已经收到了 `onAssistantSentence(state=stop)`，广告一播还是可能把 AI 尾音截断？
+
+根因通常不在服务端，而在于宿主把“服务端回复结束”和“本地播放完成”混成了一个时机。
+
+### 先说结论
+
+#### 结论 1
+
+`onAssistantSentence(state=stop)` 表示：
+
+```text
+服务端当前回复已经结束
+```
+
+它不表示：
+
+```text
+宿主本地播放器已经播完
+```
+
+#### 结论 2
+
+`onAssistantPcm(frame)` 本身没有 `eof` 或 `isLastFrame` 之类的字段，所以宿主不能靠某一帧 PCM 自己判断“已经彻底结束”。
+
+#### 结论 3
+
+如果你的业务需要精确决定广告插播时机，推荐至少分成两步：
+
+1. 先等服务端 stop
+2. 再等宿主本地播放器收口
+
+### Demo 里是怎么处理的
+
+当前 Demo 里，`AssistantPcmPlayer` 主要做了三件事：
+
+1. 把 SDK 回调的 PCM 放进本地播放队列
+2. 在打断场景下屏蔽旧 `responseId` 的尾包
+3. 在没有新 PCM 到来后，把本地播放链路收口到空闲态
+
+这意味着 Demo 实际上已经体现了两个层次：
+
+- 服务端 stop：由 `onAssistantSentence(state=stop)` 体现
+- 本地播放收口：由播放器自己的空闲/停止逻辑体现
+
+### 推荐把时序拆成两层看
+
+#### 第一层：服务端输出生命周期
+
+```text
+用户输入确认
+-> AI 文本句子 start
+-> AI PCM 连续下发
+-> AI 回复 stop
+```
+
+#### 第二层：宿主本地播放生命周期
+
+```text
+收到 PCM
+-> 本地播放器开始消费
+-> 本地播放队列逐步排空
+-> 本地播放链路进入收口/空闲
+```
+
+这两层通常是有时间差的。
+
+### 苏州两日游案例
+
+用户说：
+
+```text
+帮我规划一下苏州两日游
+```
+
+服务端已经发出：
+
+```text
+onAssistantSentence(state=stop, responseId=resp-A, reason=eos)
+```
+
+这时候只能说明：
+
+- `resp-A` 这轮回复不再继续下发内容了
+
+但并不能说明：
+
+- 宿主 AudioTrack 里的最后一点语音已经播出来了
+
+如果这时立刻切广告，就容易把尾音截掉。
+
+更稳妥的处理方式是：
+
+```text
+收到服务端 stop
+-> 继续等待本地播放器收口
+-> 本地收口后再切广告
+```
+
+### `barge_in` 场景怎么理解
+
+如果用户在 AI 说到一半时插话：
+
+```text
+预算两千以内呢？
+```
+
+常见时序是：
+
+```text
+旧回复 resp-A 正在播
+-> 服务端发 stop(reason=barge_in)
+-> 宿主停掉旧播放并屏蔽旧尾包
+-> 新输入确认
+-> 新回复 resp-B 开始
+```
+
+这种场景和正常 `eos` 最大的区别在于：
+
+- `eos` 更偏向自然结束
+- `barge_in` 更偏向立即切断旧回复，进入新回复
+
+因此宿主在处理 `barge_in` 时，通常会比 `eos` 更激进地执行本地停播。
+
+### 推荐的广告插播策略
+
+#### 正常结束 `eos`
+
+推荐策略：
+
+```text
+AI 回复 stop(reason=eos)
+-> 标记服务端已结束
+-> 等待本地播放收口
+-> 再播广告
+```
+
+#### 打断结束 `barge_in / input_text / stopword`
+
+推荐策略：
+
+```text
+AI 回复 stop(reason=barge_in / input_text / stopword)
+-> 立即停止旧播放并屏蔽旧尾包
+-> 进入新一轮输入 / 新一轮回复
+```
+
+#### 文本发送时带 `interrupt=true`
+
+推荐策略：
+
+```text
+宿主先本地停掉当前播放
+-> 再发送新的文本输入
+-> 等待新的 responseId 开始
+```
+
+### 这个 Demo 能帮到什么程度
+
+这个 Demo 的目标是给出参考实现，而不是替所有宿主封装统一播放器。
+
+因此它能帮你看到：
+
+- 当前 SDK 的 stop 语义
+- 当前 SDK 的 PCM 下发方式
+- 一个宿主侧参考播放器如何处理中断、尾包和本地收口
+
+但它不能替你决定：
+
+- 你的业务广告应该延迟多少毫秒切入
+- 你的播放器内部什么时候才算完全排空
+- 你的混音、音频焦点、音量淡入淡出策略
+
+这些仍然属于宿主侧实现范畴。
+
 ## 推荐阅读顺序
 
 如果你是第一次接入，建议按下面顺序看代码：
 
-1. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
-2. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
-3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+1. 先读本文的“输出生命周期说明”
+2. 再读本文的“Assistant PCM 播放与广告插播参考”
+3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
+4. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
+5. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
 
 其中：
 
@@ -245,3 +667,23 @@ Demo 运行时需要你自己填写以下参数：
 - 是否已授予 `RECORD_AUDIO`
 - 是否真的已经进入 `CONNECTED` 状态
 - 是否点击了 `Start Listen`
+
+### 为什么已经收到了 `onAssistantSentence(state=stop)`，广告一播还是会截断尾音
+
+因为这个 stop 表示的是“服务端当前回复结束”，不等于“宿主本地播放器已经播完”。
+
+更稳妥的做法是：
+
+1. 先用 `state=stop` 判断服务端已经结束当前回复
+2. 再等待宿主本地播放器收口
+3. 最后再播广告或恢复背景音
+
+具体可以直接看上文“输出生命周期说明”和“Assistant PCM 播放与广告插播参考”。
+
+### PCM 为什么没有像文本那样的 `null` 终止符
+
+因为当前 SDK 对外暴露的 `PcmFrame` 是纯音频帧模型，只负责下发 PCM 数据，不额外伪造结束帧。
+
+当前回复的结束语义在 `onAssistantSentence(state=stop)`，而不是在某个特殊 PCM 帧里。
+
+如果你要判断更接近“本地已经播完”的时机，需要继续结合宿主自己的播放链路状态来处理。具体可以直接看上文“输出生命周期说明”和“Assistant PCM 播放与广告插播参考”。

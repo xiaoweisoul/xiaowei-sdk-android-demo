@@ -72,6 +72,8 @@ public class MainActivity extends AppCompatActivity {
     private final AtomicInteger soulProfileLoadGeneration = new AtomicInteger();
     // Demo 通过 SDK 对外工厂获取客户端，避免依赖具体实现类。
     private final XiaoweiSessionClient sessionClient = XiaoweiSessionClients.create();
+    // Demo 额外聚合多句 AI 文本，便于公开示例里展示一轮 response 的完整收口。
+    private final AssistantResponseTracker assistantResponseTracker = new AssistantResponseTracker();
 
     // Demo 宿主负责正式的下行 PCM 播放链路，SDK 只负责回调统一 PcmFrame。
     private AssistantPcmPlayer assistantPcmPlayer;
@@ -121,6 +123,7 @@ public class MainActivity extends AppCompatActivity {
         applyDemoLanguageTexts();
         renderSdkInfo();
         renderStartupAudioPreprocessPreview();
+        renderOutputLifecycleGuidance();
         requestRecordAudioPermissionIfNeeded();
         appendLog("[Demo] playback_enabled=" + ENABLE_ASSISTANT_PCM_PLAYBACK
                 + " permission_auto_request=true"
@@ -247,11 +250,12 @@ public class MainActivity extends AppCompatActivity {
             public void onUserInputCommitted(UserInputCommittedEvent event) {
                 String source = safe(event.getSource());
                 String text = safe(event.getText());
-                if ("asr".equals(source)) {
-                    appendLog("[语音识别] " + text);
-                    return;
-                }
-                appendLog("[文本已提交] " + text);
+                appendLog("[用户输入已确认]"
+                        + " source=" + displayValue(source)
+                        + " turnId=" + displayValue(event.getTurnId())
+                        + " inputId=" + displayValue(event.getInputId())
+                        + " clientInputId=" + displayValue(event.getClientInputId())
+                        + " text=" + text);
             }
 
             @Override
@@ -263,24 +267,35 @@ public class MainActivity extends AppCompatActivity {
             public void onAssistantSentence(AssistantSentenceEvent event) {
                 String state = safe(event.getState());
                 if (AssistantSentenceEvent.STATE_START.equals(state)) {
-                    appendLog("[服务端] [下发] 开始下发"
+                    AssistantResponseTracker.SentenceSnapshot snapshot = assistantResponseTracker.recordSentenceStart(event);
+                    appendLog("[AI文本句子]"
                             + " index=" + displayValue(event.getIndex())
-                            + " turnId=" + displayValue(event.getTurnId())
-                            + " responseId=" + displayValue(event.getResponseId())
-                            + " text=" + safe(event.getText()));
+                            + " sentenceCount=" + snapshot.getSentenceCount()
+                            + " turnId=" + displayValue(snapshot.getTurnId())
+                            + " responseId=" + displayValue(snapshot.getResponseId())
+                            + " text=" + snapshot.getLatestText());
                     return;
                 }
+                AssistantResponseTracker.ResponseSummary summary = assistantResponseTracker.recordSentenceStop(event);
                 if (event.isInterruptiveStop()) {
                     AssistantPcmPlayer player = assistantPcmPlayer;
                     if (player != null) {
                         player.interruptAndSuppressResponseFromServer(event.getResponseId(), event.getStopReason());
                     }
                 }
-                appendLog("[服务端] [下发] 下发结束"
+                appendLog("[AI回复结束]"
                         + " turnId=" + displayValue(event.getTurnId())
                         + " responseId=" + displayValue(event.getResponseId())
                         + " reason=" + displayValue(event.getStopReason())
-                        + " interruptive=" + event.isInterruptiveStop());
+                        + " interruptive=" + event.isInterruptiveStop()
+                        + " stage=服务端收口（不代表本地已播完）");
+                if (summary.hasText()) {
+                    appendLog("[AI回复汇总]"
+                            + " turnId=" + displayValue(summary.getTurnId())
+                            + " responseId=" + displayValue(summary.getResponseId())
+                            + " sentenceCount=" + summary.getSentenceCount()
+                            + " text=" + summary.getTextPreview());
+                }
             }
 
             @Override
@@ -300,6 +315,15 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onAssistantPcm(PcmFrame frame) {
+                AssistantResponseTracker.PcmObservation observation = assistantResponseTracker.observePcm(frame);
+                if (observation.isFirstFrame()) {
+                    appendLog("[PCM下发]"
+                            + " firstFrame=true"
+                            + " turnId=" + displayValue(observation.getTurnId())
+                            + " responseId=" + displayValue(observation.getResponseId())
+                            + " seq=" + observation.getSeq()
+                            + " samplesPerChannel=" + observation.getSamplesPerChannel());
+                }
                 AssistantPcmPlayer player = assistantPcmPlayer;
                 if (ENABLE_ASSISTANT_PCM_PLAYBACK && player != null) {
                     player.play(frame);
@@ -976,6 +1000,14 @@ public class MainActivity extends AppCompatActivity {
         appendLog(formatAudioPreprocessPreviewLog(status));
     }
 
+    /**
+     * 首次打开页面时先补一条接入提示，帮助公开 Demo 使用者建立正确的输出生命周期心智模型。
+     */
+    private void renderOutputLifecycleGuidance() {
+        appendLog("[接入提示] [AI回复结束] 只表示服务端 stop；真正更接近“本地已播完”的时机，请继续观察 [TtsPlayer] [本地播放收口]。");
+        appendLog("[接入提示] Demo 会按 responseId 聚合多句 AI 文本，并额外打印 [AI回复汇总]，便于理解一轮长回复。");
+    }
+
     @NonNull
     private String formatAudioPreprocessLog(@NonNull AudioPreprocessStatus status) {
         return "[平台效果器] [录音实检] "
@@ -1041,6 +1073,7 @@ public class MainActivity extends AppCompatActivity {
      * 在会话断开或页面销毁时停止当前 TTS 播放，避免旧会话语音残留。
      */
     private void stopAssistantPlayback() {
+        assistantResponseTracker.reset();
         AssistantPcmPlayer player = assistantPcmPlayer;
         if (player != null) {
             player.flushStopAndResetResponseState();
