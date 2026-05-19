@@ -4,7 +4,7 @@
 
 默认情况下，这个 Demo 会优先通过 `mavenCentral()` 解析 SDK。
 
-如果你希望显式验证当前代码库构建出来的本地 SDK，可在构建时传入 `-PuseLocalSdkRepo=true`。
+仓库里也保留了 `-PuseLocalSdkRepo=true` 这个本地仓库开关，但它主要面向 SDK 维护 / 联调用途；普通接入方默认不需要关心。
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview 
 
@@ -18,7 +18,7 @@
 
 ## 你能用这个 Demo 做什么
 
-- 验证 Maven Central 与本地 Maven 仓库两种接入方式
+- 验证 Maven Central 接入方式
 - 演示如何创建 `XiaoweiSessionClient`
 - 演示如何配置连接参数和 session token 获取逻辑
 - 演示如何连接、发送文本、打开收音、接收事件回调
@@ -36,7 +36,7 @@
 ## 目录说明
 
 - `app/`：Demo Android 应用模块
-- `local-sdk-repo/`：本地 Maven 仓库目录，仅在显式启用本地模式时用于解析 SDK
+- `local-sdk-repo/`：本地 Maven 仓库目录，仅在 SDK 维护者显式启用本地模式时才会用到；普通接入方可以忽略
 
 ## 使用前准备
 
@@ -48,33 +48,19 @@
 ./gradlew :app:assembleDebug
 ```
 
-### 2. 可选：切换到本地 Maven 仓库
+### 2. 可选：仅 SDK 维护 / 联调时使用的本地仓库模式
 
-如果你正在验证当前代码库构建出来的 SDK，请先在 SDK 仓库执行：
+如果你只是接入公开 SDK，可以跳过这一节。
 
-```bash
-./build_android_sdk.sh
-```
+本仓库保留了 `-PuseLocalSdkRepo=true` 开关，供 SDK 维护者在本地联调 `local-sdk-repo/` 时使用。
 
-然后确认本仓库根目录存在：
-
-```text
-xiaowei-sdk-android-demo/
-  local-sdk-repo/
-    vip/
-      xiaoweisoul/
-        sdk/
-          session-core/
-            1.0.9/
-```
-
-然后在本仓库显式启用本地模式：
+只有在你已经准备好了仓库根目录下的 `local-sdk-repo/` 后，才需要显式启用：
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
 ```
 
-如果目录不对，Gradle 会直接报错。
+如果目录缺失或结构不对，Gradle 会直接报错。
 
 ### 3. 准备连接参数
 
@@ -116,7 +102,7 @@ Demo 运行时需要你自己填写以下参数：
 ./gradlew :app:assembleDebug
 ```
 
-如果你希望显式验证本地 SDK 模式，请改用：
+如果你是 SDK 维护者，并且已经准备好了 `local-sdk-repo/`，才需要改用：
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
@@ -625,9 +611,11 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - 由业务服务端安全地下发短期 `session token`
 - SDK 再通过 `SessionTokenProvider` 使用这个 token 建连
 
-### 2. 这个 Demo 默认使用 Maven Central 接入 SDK
+### 2. 这个 Demo 面向公开 SDK 接入，默认使用 Maven Central
 
-只有在你显式传入 `-PuseLocalSdkRepo=true` 时，才会切换到仓库根目录下的 `local-sdk-repo/`。
+普通接入方直接使用默认模式即可。
+
+`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景，不是公开接入主路径。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -648,7 +636,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 请检查：
 
 - 默认模式下，检查 Maven Central 上是否已经发布该版本，以及当前网络是否能访问 Maven Central
-- 如果你启用了 `-PuseLocalSdkRepo=true`，再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.9/`
+- 只有在你明确启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.9/`
 
 ### 点击 Connect 后失败
 

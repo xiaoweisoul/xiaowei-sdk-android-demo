@@ -2,7 +2,7 @@
 
 本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.9` をアプリへ統合し、最小構成で会話セッションを接続する流れを確認できます。
 
-デフォルトでは、この Demo は `mavenCentral()` から SDK を解決します。現在の SDK コードをローカルで明示的に検証したい場合だけ、ビルド時に `-PuseLocalSdkRepo=true` を指定してください。
+デフォルトでは、この Demo は `mavenCentral()` から SDK を解決します。`-PuseLocalSdkRepo=true` というローカルリポジトリ切替も残していますが、これは主に SDK の保守 / ローカル検証向けです。通常の利用者は意識しなくて構いません。
 
 詳細情報はこちらをご参照ください: http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -16,7 +16,7 @@
 
 ## この Demo で確認できること
 
-- Maven Central とローカル Maven リポジトリの両方で SDK を正しく組み込めているかの確認
+- Maven Central から SDK を組み込む基本フローの確認
 - `XiaoweiSessionClient` の生成方法
 - 接続パラメータと session token 取得ロジックの設定例
 - 接続、テキスト送信、録音開始、イベント受信までの基本フロー
@@ -34,7 +34,7 @@ SDK を組み込むこと自体が目的であれば、この Demo を直接改�
 ## ディレクトリ構成
 
 - `app/`: Demo Android アプリモジュール
-- `local-sdk-repo/`: ローカル Maven リポジトリ。ローカル SDK モード時のみ使用
+- `local-sdk-repo/`: ローカル Maven リポジトリ。SDK 保守時に明示的にローカルモードを使う場合のみ利用
 
 ## 実行前の準備
 
@@ -46,33 +46,19 @@ SDK を組み込むこと自体が目的であれば、この Demo を直接改�
 ./gradlew :app:assembleDebug
 ```
 
-### 2. 必要に応じてローカル Maven リポジトリへ切り替える
+### 2. 任意: SDK 保守 / ローカル検証向けのローカルリポジトリモード
 
-現在の SDK コードをローカルで検証したい場合は、先に SDK リポジトリ側で次を実行してください。
+公開 SDK を組み込むだけなら、この節は読み飛ばしてかまいません。
 
-```bash
-./build_android_sdk.sh
-```
+このリポジトリには `-PuseLocalSdkRepo=true` という切替を残しています。SDK の保守やローカル検証で `local-sdk-repo/` を使う場合だけ有効にしてください。
 
-その後、このリポジトリ直下に次のディレクトリが存在することを確認します。
-
-```text
-xiaowei-sdk-android-demo/
-  local-sdk-repo/
-    vip/
-      xiaoweisoul/
-        sdk/
-          session-core/
-            1.0.9/
-```
-
-確認できたら、このリポジトリでローカル SDK モードを明示します。
+リポジトリ直下に `local-sdk-repo/` が準備できている場合のみ、次のように明示します。
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
 ```
 
-ディレクトリ構成が異なる場合、Gradle ビルド時にそのままエラーになります。
+ディレクトリがない、または構成が異なる場合は、Gradle がそのままエラーを返します。
 
 ### 3. 接続パラメータを準備する
 
@@ -116,7 +102,7 @@ Demo の実行には、次のパラメータが必要です。
 ./gradlew :app:assembleDebug
 ```
 
-ローカル SDK モード:
+SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
@@ -627,9 +613,11 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - 業務サーバーが安全に短期 `session token` を払い出す
 - SDK は `SessionTokenProvider` を通じてその token を使って接続する
 
-### 2. この Demo はデフォルトで Maven Central を使います
+### 2. この Demo は公開向け SDK 組み込みを主目的とし、デフォルトで Maven Central を使います
 
-現在の SDK コードをローカルで先に検証したい場合だけ `-PuseLocalSdkRepo=true` を指定してください。
+通常の利用者はデフォルトモードのままで構いません。
+
+`-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証用です。
 
 ### 3. 音声機能にはマイク権限が必要です
 
@@ -651,7 +639,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
-- `-PuseLocalSdkRepo=true` を付けている場合は `local-sdk-repo/` が存在するか
+- `-PuseLocalSdkRepo=true` を自分で有効にしている場合のみ、`local-sdk-repo/` が存在するか
 - `vip/xiaoweisoul/sdk/session-core/1.0.9/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
