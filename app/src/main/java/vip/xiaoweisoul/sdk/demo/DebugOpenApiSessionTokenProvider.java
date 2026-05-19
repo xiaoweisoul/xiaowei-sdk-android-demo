@@ -77,6 +77,7 @@ final class DebugOpenApiSessionTokenProvider implements SessionTokenProvider {
         JsonObject requestBodyJson = new JsonObject();
         requestBodyJson.addProperty("integration_app_id", integrationAppId);
         requestBodyJson.addProperty("soul_id", soulId);
+        requestBodyJson.addProperty("end_user_id", "zhangsan_001");
         requestBodyJson.addProperty("trace_id", "demo-" + System.currentTimeMillis());
 
         // 应用记忆按“应用 + 元神 + end_user_id”隔离；联调记忆能力时必须传真实且稳定的终端用户 ID。

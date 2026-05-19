@@ -15,6 +15,7 @@ import androidx.annotation.Nullable;
 import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
 
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -38,6 +39,7 @@ final class AssistantPcmPlayer {
 
     /**
      * 播放线程空闲超时；超过该时长仍无新 PCM，则把当前链路收口到静音空闲态。
+     * Demo 用这个空闲收口点示意“更接近本地已播完”，方便公开文档解释广告插播时机。
      */
     private static final long IDLE_STOP_TIMEOUT_MS = 5000L;
 
@@ -99,6 +101,11 @@ final class AssistantPcmPlayer {
     private boolean forceMute;
     private int currentSampleRateHz = -1;
     private int currentChannels = -1;
+    @Nullable
+    private Long currentPlaybackTurnId;
+    @Nullable
+    private String currentPlaybackResponseId;
+    private boolean localPlaybackActive;
 
     /**
      * 创建一个独立播放器线程，专门消费 SDK 回调的 assistant PCM。
@@ -138,6 +145,7 @@ final class AssistantPcmPlayer {
                 frame.getSampleRateHz(),
                 frame.getChannels(),
                 frame.getSeq(),
+                frame.getTurnId(),
                 frame.getResponseId(),
                 copyFrameData(frame)
         );
@@ -256,7 +264,7 @@ final class AssistantPcmPlayer {
                 PlaybackItem item = queue.pollFirst(IDLE_STOP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
                 if (item == null) {
                     if (hasTrack()) {
-                        enterIdleState("[AudioTrack空闲] 无声音播放，超出时限 " + IDLE_STOP_TIMEOUT_MS + "ms，释放音频焦点并保留 AudioTrack");
+                        enterIdleState("等待新 PCM 超时 " + IDLE_STOP_TIMEOUT_MS + "ms");
                     }
                     continue;
                 }
@@ -295,6 +303,10 @@ final class AssistantPcmPlayer {
                 clearForceMuteLocked();
             }
             ensureTrackPlaying(track);
+            String playbackStartLog = announcePlaybackStartIfNeeded(item);
+            if (playbackStartLog != null) {
+                logLine(playbackStartLog);
+            }
             byte[] data = item.data;
             if (data == null || data.length == 0) {
                 return;
@@ -436,10 +448,18 @@ final class AssistantPcmPlayer {
      * 进入静默态：保留 AudioTrack 与当前焦点，只做本地静音，减少硬切播放链路导致的爆破音。
      */
     private void enterIdleState(@NonNull String reason) {
+        String idleLog = null;
         synchronized (audioLock) {
             boolean shouldLog = !idleStateEntered;
             idleStateEntered = true;
-            muteAudioTrackLocked(shouldLog ? reason : null);
+            muteAudioTrackLocked(null);
+            if (shouldLog) {
+                idleLog = buildPlaybackIdleLogLocked(reason);
+                clearCurrentPlaybackStateLocked();
+            }
+        }
+        if (idleLog != null) {
+            logLine(idleLog);
         }
     }
 
@@ -604,6 +624,7 @@ final class AssistantPcmPlayer {
         if (track == null) {
             currentSampleRateHz = -1;
             currentChannels = -1;
+            clearCurrentPlaybackStateLocked();
             return;
         }
         audioTrack = null;
@@ -611,6 +632,7 @@ final class AssistantPcmPlayer {
         currentChannels = -1;
         idleStateEntered = false;
         forceMute = false;
+        clearCurrentPlaybackStateLocked();
         try {
             track.pause();
         } catch (Exception ignored) {
@@ -702,6 +724,53 @@ final class AssistantPcmPlayer {
         logger.log(message);
     }
 
+    @Nullable
+    private String announcePlaybackStartIfNeeded(@NonNull PlaybackItem item) {
+        synchronized (audioLock) {
+            String normalizedResponseId = normalizeResponseId(item.responseId);
+            if (localPlaybackActive
+                    && Objects.equals(currentPlaybackResponseId, normalizedResponseId)
+                    && Objects.equals(currentPlaybackTurnId, item.turnId)) {
+                return null;
+            }
+            localPlaybackActive = true;
+            currentPlaybackTurnId = item.turnId;
+            currentPlaybackResponseId = normalizedResponseId;
+            return "[TtsPlayer] [本地播放开始]"
+                    + " turnId=" + displayValue(item.turnId)
+                    + " responseId=" + displayValue(normalizedResponseId)
+                    + " seq=" + item.seq;
+        }
+    }
+
+    @NonNull
+    private String buildPlaybackIdleLogLocked(@NonNull String reason) {
+        return "[TtsPlayer] [本地播放收口]"
+                + " turnId=" + displayValue(currentPlaybackTurnId)
+                + " responseId=" + displayValue(currentPlaybackResponseId)
+                + " reason=" + reason
+                + "；Demo 中这类本地收口信号比服务端 stop 更接近广告/背景音恢复时机。";
+    }
+
+    private void clearCurrentPlaybackStateLocked() {
+        currentPlaybackTurnId = null;
+        currentPlaybackResponseId = null;
+        localPlaybackActive = false;
+    }
+
+    @NonNull
+    private static String displayValue(@Nullable String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return "-";
+        }
+        return value.trim();
+    }
+
+    @NonNull
+    private static String displayValue(@Nullable Number value) {
+        return value == null ? "-" : String.valueOf(value);
+    }
+
     /**
      * 播放线程内部统一命令对象。
      */
@@ -715,32 +784,50 @@ final class AssistantPcmPlayer {
         private final int channels;
         private final long seq;
         @Nullable
+        private final Long turnId;
+        @Nullable
         private final String responseId;
         @Nullable
         private final byte[] data;
 
-        private PlaybackItem(int type, int sampleRateHz, int channels, long seq, @Nullable String responseId, @Nullable byte[] data) {
+        private PlaybackItem(
+                int type,
+                int sampleRateHz,
+                int channels,
+                long seq,
+                @Nullable Long turnId,
+                @Nullable String responseId,
+                @Nullable byte[] data
+        ) {
             this.type = type;
             this.sampleRateHz = sampleRateHz;
             this.channels = channels;
             this.seq = seq;
+            this.turnId = turnId;
             this.responseId = responseId;
             this.data = data;
         }
 
         @NonNull
-        private static PlaybackItem play(int sampleRateHz, int channels, long seq, @Nullable String responseId, @NonNull byte[] data) {
-            return new PlaybackItem(TYPE_PLAY, sampleRateHz, channels, seq, responseId, data);
+        private static PlaybackItem play(
+                int sampleRateHz,
+                int channels,
+                long seq,
+                @Nullable Long turnId,
+                @Nullable String responseId,
+                @NonNull byte[] data
+        ) {
+            return new PlaybackItem(TYPE_PLAY, sampleRateHz, channels, seq, turnId, responseId, data);
         }
 
         @NonNull
         private static PlaybackItem flushStop() {
-            return new PlaybackItem(TYPE_FLUSH_STOP, 0, 0, 0L, null, null);
+            return new PlaybackItem(TYPE_FLUSH_STOP, 0, 0, 0L, null, null, null);
         }
 
         @NonNull
         private static PlaybackItem release() {
-            return new PlaybackItem(TYPE_RELEASE, 0, 0, 0L, null, null);
+            return new PlaybackItem(TYPE_RELEASE, 0, 0, 0L, null, null, null);
         }
     }
 }
