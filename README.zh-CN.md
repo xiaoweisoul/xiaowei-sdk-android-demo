@@ -1,6 +1,8 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你更快完成基础接入，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.9`，并验证最小会话闭环。
+
+公开接入默认走 `mavenCentral()`。普通接入方通常只需要这一条路径；`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景。
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -8,11 +10,11 @@
 
 - 验证 Maven Central 接入方式
 - 演示如何创建 `XiaoweiSessionClient`
-- 演示如何配置连接参数和 session token 获取逻辑
+- 演示如何配置连接参数、session token 和 `End User ID`
 - 演示如何连接、发送文本、打开收音、接收事件回调
 - 演示如何理解 `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` 三类核心输出信号
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
-- 演示主页面语言切换、四个内置元神快速切换与日志排查流程
+- 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
 - 演示如何注册本地工具、触发表情动画并观察工具调用事件
 
@@ -53,7 +55,7 @@ Demo 运行时需要你自己填写以下参数：
 - `Integration App ID` 填的是控制台“应用中心”列表里展示的 `app_id`。
 - 当前值格式是字符串，例如 `app_g1ht6a8o`。
 - `End User ID` 填的是 App 侧真实终端用户的稳定唯一标识，例如 `user_10001`。
-- 如果要验证记忆能力，`End User ID` 不能多个用户共用，也不应该在同一用户身上频繁变化。
+- 如果要验证记忆能力，同一个真实用户应持续使用同一个 `End User ID`，不同用户不要共用。
 - `Soul ID` 填的是元神配置里的稳定标识，例如 `soul_acme_companion_main_v1`。
 
 这些值不会在仓库中提供你的正式业务默认值。请根据自己的测试环境或业务环境填写。
@@ -70,7 +72,7 @@ Demo 运行时需要你自己填写以下参数：
 
 ### 命令行
 
-在仓库根目录执行：
+在仓库根目录执行默认模式：
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -84,11 +86,12 @@ Demo 运行时需要你自己填写以下参数：
 
 ## 快速体验
 
-为了方便大家快速体验，这个 Demo 已经内置了一套可直接联调的默认配置，包括：
+为了方便大家快速体验，这个 Demo 已经内置了一套可直接联调的公开体验配置，包括：
 
 - 一个内置应用
 - 一组内置 API Key
-- 多个内置聊天助手元神
+- 一个默认 `End User ID`
+- 一个默认 `Soul ID`
 
 首次运行后，你可以直接使用这套内置配置进行体验；如果之前改过配置，也可以在设置页点击 `Restore Defaults` 恢复为内置值，再返回主页面点击 `Connect` 开始体验。
 
@@ -96,7 +99,7 @@ Demo 运行时需要你自己填写以下参数：
 
 如果你希望查看、创建或维护自己的应用、API Key 和元神信息，需要联系客服注册账号并开通对应权限，然后在你自己的控制台中完成配置。
 
-这些默认值统一定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` 中，并会回填到设置页对应字段。
+这些公开默认值主要定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` 中，并会回填到设置页对应字段。主页面里的元神下拉框会根据当前 `Access Key ID / Secret` 动态从 OpenAPI 拉取可用角色列表。
 
 设置页里与快速体验直接相关的字段和值如下：
 
@@ -107,13 +110,13 @@ Demo 运行时需要你自己填写以下参数：
 | `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内置 API Key ID |
 | `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内置 API Key Secret |
 | `Integration App ID` | `app_remav935` | 内置应用 ID |
-| `End User ID` | `sdk-demo-ghtao-01` | Demo 默认终端用户 ID；用于隔离记忆体验 |
+| `End User ID` | `app_demo_end_user_001` | Demo 默认终端用户 ID；用于区分公开体验中的用户身份 |
 | `Protocol Version` | `1` | 协议版本 |
 | `Logical Device ID` | `app.demo.device-001` | 默认逻辑设备 ID |
 | `Logical Client ID` | `sdk.demo.client-001` | 默认逻辑客户端 ID |
-| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 当前默认元神；也可以改成下表中的任意一个内置聊天助手元神 |
+| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 当前默认元神；如果角色列表加载成功，也可以切换为下表中的示例值 |
 
-内置的聊天助手元神 `soul_id` 如下：
+当前公开体验环境里，常见的聊天助手 `soul_id` 示例包括：
 
 | 元神名称 | `soul_id` |
 |---|---|
@@ -123,7 +126,10 @@ Demo 运行时需要你自己填写以下参数：
 | 聊天助手（日文男生） | `soul_demo_japanese_male_chat_assistant_v1` |
 | 聊天助手（中日女生） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
 
-如果你想快速体验不同元神，最直接的方式就是进入设置页，只修改 `Soul ID` 字段为上面任意一个值，保存后重新连接。
+如果你想快速体验不同元神，最直接的方式是：
+
+1. 等主页面成功加载可用角色列表后，直接用下拉框切换
+2. 或者在设置页里手动修改 `Soul ID` 后重新连接
 
 ## Demo 使用说明
 
@@ -134,7 +140,7 @@ Demo 运行时需要你自己填写以下参数：
 - 查看当前 SDK 名称和版本
 - 切换主页面展示语言（中文 / 日文）
 - 打开设置页填写连接参数
-- 使用内置下拉框快速切换默认元神
+- 使用下拉框快速切换当前可用元神
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
 - `Send Text`
@@ -158,6 +164,8 @@ Demo 运行时需要你自己填写以下参数：
 这个 Demo 会把配置保存在本地 `SharedPreferences` 中，方便重复测试。
 
 设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
+
+设置页里的 `End User ID` 建议直接填写真实终端用户的稳定唯一标识，尤其是在验证记忆能力时。
 
 ## 输出生命周期说明
 
@@ -561,22 +569,30 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 ## 推荐阅读顺序
 
-如果你是第一次接入，建议按下面顺序看代码：
+如果你是第一次接入，建议按下面顺序看：
 
 1. 先读本文的“输出生命周期说明”
 2. 再读本文的“Assistant PCM 播放与广告插播参考”
 3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
-4. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
-5. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+4. `app/src/main/java/vip/xiaoweisoul/sdk/demo/SettingsActivity.java`
+5. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
+6. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+7. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSoulProfileClient.java`
 
-其中：
+建议重点关注下面这些文件：
 
-### 使用时要注意
+- `MainActivity.java`：连接、收音、发文本、可用元神加载、事件日志、工具注册和本地 PCM 播放参考
+- `SettingsActivity.java`：设置页表单、保存和 `Restore Defaults`
+- `AppPrefs.java`：公开默认值与本地持久化
+- `DebugOpenApiSessionTokenProvider.java`：示例工程如何获取 `session token`
+- `DebugOpenApiSoulProfileClient.java`：如何根据当前 Access Key 拉取可用元神列表
+
+## 如果你要验证记忆能力
 
 - 不同真实用户不要共用同一个 `End User ID`，否则记忆会串。
 - 同一个真实用户不要今天用 `user_10001`、明天改成 `user_10001_v2`，否则会被视为新的用户。
 - 刚说过的话不一定会立刻在当前轮生效；记忆通常需要在后续对话中逐步体现。
-- `Restore Defaults` 会把 `End User ID` 恢复成 Demo 默认值 `sdk-demo-ghtao-01`，这只适合单人联调用途。
+- `Restore Defaults` 会把 `End User ID` 恢复成 Demo 默认值 `app_demo_end_user_001`，这更适合单人体验，不适合多人共用测试。
 
 ## 重要说明
 
@@ -600,7 +616,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 如果你要测试 `Start Listen`，请确认设备已经授予 `RECORD_AUDIO` 权限。
 
-### 3. GitHub Releases 中的 APK 仅用于公开测试演示
+### 4. GitHub Releases 中的 APK 仅用于公开测试演示
 
 仓库 Release 页面提供的 APK 仅用于公开测试和试用演示，不代表正式发布签名体系。
 
@@ -610,13 +626,15 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 ## 常见问题
 
-### 构建时报找不到 `vip.xiaoweisoul.sdk:session-core:1.0.9`
+### 构建 Demo 失败
 
 请检查：
 
 - 当前网络是否正常
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
+- 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.9/`
 
 ### 点击 Connect 后失败
 

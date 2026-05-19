@@ -1,6 +1,8 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android アプリへの SDK 組み込みを確認するためのサンプルプロジェクトです。アプリに基本接続を組み込み、最小構成で会話セッションを体験する流れを確認できます。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.9` をアプリへ組み込み、最小構成の会話フローを確認できます。
+
+公開向けの通常利用では `mavenCentral()` からの取得で十分です。`-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証時だけ使う想定です。
 
 詳細情報はこちらをご参照ください: http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -14,11 +16,14 @@
 
 ## この Demo で確認できること
 
-- Android アプリの基本接続ができているかの確認
-- 設定画面での接続パラメータ準備
+- Maven Central から SDK を組み込む基本フロー
+- `XiaoweiSessionClient` の作成方法
+- 接続パラメータ、session token、`End User ID` の設定例
 - 接続、テキスト送信、録音開始、イベント受信までの基本フロー
-- メイン画面の言語切り替え、デフォルト元神切り替え、ログ確認の流れ
-- 記憶機能を試す際の `End User ID` 設定例
+- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` という主要出力シグナルの理解
+- 長い応答、複数文のテキスト、`barge_in` 割り込み、ローカル PCM 再生の収束タイミングの理解
+- メイン画面の言語切り替え、利用可能な元神の読み込み / 切り替え、ログ確認の流れ
+- 録音前処理ステータス、Assistant PCM 再生、ローカルツール呼び出しの確認
 
 SDK を組み込むこと自体が目的であれば、この Demo を直接改造する必要はありません。通常は次の順番で確認することを推奨します。
 
@@ -28,33 +33,16 @@ SDK を組み込むこと自体が目的であれば、この Demo を直接改�
 ## ディレクトリ構成
 
 - `app/`: Demo Android アプリモジュール
-- `local-sdk-repo/`: ローカル Maven リポジトリ。ローカル SDK モード時のみ使用
 
 ## 実行前の準備
 
-### 1. デフォルトでは Maven Central を使う
-
-公開済み SDK を使う場合は、そのまま次を実行します。
+### 1. Demo をビルドする
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-### 2. 任意: SDK 保守 / ローカル検証向けのローカルリポジトリモード
-
-公開 SDK を組み込むだけなら、この節は読み飛ばしてかまいません。
-
-このリポジトリには `-PuseLocalSdkRepo=true` という切替を残しています。SDK の保守やローカル検証で `local-sdk-repo/` を使う場合だけ有効にしてください。
-
-リポジトリ直下に `local-sdk-repo/` が準備できている場合のみ、次のように明示します。
-
-```bash
-./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
-```
-
-ディレクトリがない、または構成が異なる場合は、Gradle がそのままエラーを返します。
-
-### 3. 接続パラメータを準備する
+### 2. 接続パラメータを準備する
 
 Demo の実行には、次のパラメータが必要です。
 
@@ -74,6 +62,7 @@ Demo の実行には、次のパラメータが必要です。
 - `Integration App ID` には管理画面の「应用中心」に表示される `app_id` を入力します。
 - 値は文字列形式です。例: `app_g1ht6a8o`
 - `End User ID` には、アプリ側で同じユーザーを継続して識別できる安定した ID を入力します。例: `user_10001`
+- 記憶機能を試す場合は、同じ利用者に同じ `End User ID` を継続して使い、別の利用者に使い回さないでください。
 - `Soul ID` には元神設定の安定識別子を入力します。例: `soul_acme_companion_main_v1`
 
 これらの値の正式な業務設定は、このリポジトリには含まれていません。利用時は、自分のテスト環境または業務環境の設定値を使用してください。
@@ -98,21 +87,28 @@ Demo の実行には、次のパラメータが必要です。
 ./gradlew :app:assembleDebug
 ```
 
+SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
+
+```bash
+./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
+```
+
 ## クイック体験
 
-すぐに試せるよう、この Demo には以下のデフォルト設定があらかじめ組み込まれています。
+すぐに試せるよう、この Demo には以下の公開体験用デフォルト設定があらかじめ組み込まれています。
 
 - 内蔵アプリ 1 つ
 - 内蔵 API Key 1 組
-- 複数の内蔵チャットアシスタント元神
+- 既定の `End User ID` 1 つ
+- 既定の `Soul ID` 1 つ
 
 初回起動時は、この内蔵設定をそのまま利用して体験できます。以前に設定を変更している場合は、設定画面で `Restore Defaults` を押して内蔵値へ戻し、メイン画面に戻って `Connect` を押せば再度試せます。
 
 ただし、この内蔵設定はクイック体験専用です。一般ユーザーは直接利用できますが、対応するバックエンドリソースを閲覧したり、自分で管理したりすることはできません。
 
-自分専用のアプリ、API Key、元神情報を閲覧・作成・管理したい場合は、サポートへ連絡してアカウント登録と権限開通を行い、自分の管理コンソールで設定してください。
+自分専用のアプリ、API Key、元神情報を閲覧・作成・管理したい場合は、サポートへ連絡してアカウント登録と権限有効化を行い、自分の管理コンソールで設定してください。
 
-これらのデフォルト値は `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` に定義されており、設定画面の各フィールドに自動反映されます。
+これらの公開デフォルト値の主要部分は `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java` に定義されており、設定画面の各フィールドに自動反映されます。メイン画面の元神セレクタは、現在の `Access Key ID / Secret` に基づいて OpenAPI から利用可能なロールを動的に読み込みます。
 
 設定画面でクイック体験に関係する主な項目は次の通りです。
 
@@ -123,13 +119,13 @@ Demo の実行には、次のパラメータが必要です。
 | `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内蔵 API Key ID |
 | `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内蔵 API Key Secret |
 | `Integration App ID` | `app_remav935` | 内蔵アプリ ID |
-| `End User ID` | `sdk-demo-ghtao-01` | Demo の既定ユーザー ID。記憶体験の切り分けに使用 |
+| `End User ID` | `app_demo_end_user_001` | Demo の既定ユーザー ID。公開体験内でのユーザー識別に使用 |
 | `Protocol Version` | `1` | プロトコルバージョン |
 | `Logical Device ID` | `app.demo.device-001` | デフォルトの Logical Device ID |
 | `Logical Client ID` | `sdk.demo.client-001` | デフォルトの Logical Client ID |
-| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 現在のデフォルト元神。下表のいずれかに変更して試すこともできます |
+| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 現在の既定値。ロール一覧の取得に成功した場合は、下表の例へ切り替えて試すこともできます |
 
-内蔵のチャットアシスタント元神 `soul_id` は次の通りです。
+公開体験環境でよく使うチャットアシスタント `soul_id` の例は次の通りです。
 
 | 元神名 | `soul_id` |
 |---|---|
@@ -139,7 +135,10 @@ Demo の実行には、次のパラメータが必要です。
 | チャットアシスタント（日本語・男性） | `soul_demo_japanese_male_chat_assistant_v1` |
 | チャットアシスタント（中日女性） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
 
-異なる元神をすぐに試したい場合は、設定画面で `Soul ID` だけを上記のいずれかに変更し、保存後に再接続する方法が最も簡単です。
+異なる元神をすぐに試したい場合は、次のいずれかが簡単です。
+
+1. メイン画面で利用可能なロール一覧が読み込まれた後、セレクタで切り替える
+2. 設定画面で `Soul ID` を手動変更して保存し、再接続する
 
 ## Demo の使い方
 
@@ -150,7 +149,7 @@ Demo の実行には、次のパラメータが必要です。
 - 現在の SDK 名称とバージョンを確認する
 - 表示言語を切り替える（中国語 / 日本語）
 - 設定画面を開いて接続パラメータを入力する
-- 内蔵セレクタで 4 つのデフォルト元神をすばやく切り替える
+- ドロップダウンで利用可能な元神を切り替える
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
 - `Send Text`
@@ -174,6 +173,8 @@ Demo の実行には、次のパラメータが必要です。
 この Demo は設定をローカルの `SharedPreferences` に保存するため、繰り返しテストしやすくなっています。
 
 設定画面の `Integration App ID` は文字列として保存・送信され、`app_xxxxxxxx` 形式をそのまま入力できます。
+
+設定画面の `End User ID` には、特に記憶機能を試す場合、実際の利用者を継続して識別できる安定 ID を入れてください。
 
 ## 出力ライフサイクルの説明
 
@@ -584,19 +585,31 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 1. まず本 README の「出力ライフサイクルの説明」を読む
 2. 次に本 README の「Assistant PCM 再生と広告挿入の参考」を読む
 3. `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java`
-4. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
-5. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+4. `app/src/main/java/vip/xiaoweisoul/sdk/demo/SettingsActivity.java`
+5. `app/src/main/java/vip/xiaoweisoul/sdk/demo/AppPrefs.java`
+6. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSessionTokenProvider.java`
+7. `app/src/main/java/vip/xiaoweisoul/sdk/demo/DebugOpenApiSoulProfileClient.java`
 
-使用時のポイント：
+特に次のファイルを見ると全体像をつかみやすくなります。
+
+- `MainActivity.java`: 接続、録音、テキスト送信、利用可能な元神の読み込み、イベントログ、ローカル PCM 再生の参考実装
+- `SettingsActivity.java`: 設定画面、保存、`Restore Defaults`
+- `AppPrefs.java`: 公開デフォルト値とローカル永続化
+- `DebugOpenApiSessionTokenProvider.java`: サンプルでの `session token` 取得方法
+- `DebugOpenApiSoulProfileClient.java`: 現在の Access Key から利用可能な元神一覧を取得する方法
+
+## 記憶機能を試すときの注意点
 
 - 同じ利用者には常に同じ `End User ID` を使う
 - 別の利用者に同じ `End User ID` を使わせない
 - 会話直後ではなく、後続の会話で徐々に記憶効果が見える場合がある
-- `Restore Defaults` で既定値に戻すと、単一ユーザー向けの体験設定に戻る
+- `Restore Defaults` で既定値に戻すと `End User ID` は `app_demo_end_user_001` に戻るため、単一ユーザー向けの体験設定になる
 
 ## 重要事項
 
 ### 1. この Demo はサンプルであり、本番利用は推奨しません
+
+特に `DebugOpenApiSessionTokenProvider.java` はクライアント側から直接 token を取得する実装であり、テストまたはデモ用途にのみ適しています。
 
 本番環境では、次の方針を推奨します。
 
@@ -611,7 +624,6 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 `-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証用です。
 
 ### 3. 音声機能にはマイク権限が必要です
-### 2. 音声機能にはマイク権限が必要です
 
 `Start Listen` を試す場合は、端末に `RECORD_AUDIO` 権限が付与されていることを確認してください。
 
