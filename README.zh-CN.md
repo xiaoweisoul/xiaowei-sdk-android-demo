@@ -1,20 +1,8 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来演示如何在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.9`，并跑通最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你更快完成基础接入，并验证最小会话闭环。
 
-默认情况下，这个 Demo 会优先通过 `mavenCentral()` 解析 SDK。
-
-仓库里也保留了 `-PuseLocalSdkRepo=true` 这个本地仓库开关，但它主要面向 SDK 维护 / 联调用途；普通接入方默认不需要关心。
-
-您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview 
-
-本文除了基本运行说明外，也会完整覆盖下面这些高频接入问题：
-
-- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` 分别代表什么
-- 一轮长回复里，多句 AI 文本和多帧 PCM 是怎么组织的
-- `barge_in` / `interrupt=true` 这种打断场景应该怎么理解
-- 为什么 `onAssistantSentence(state=stop)` 不等于本地已经播完
-- 广告插播、背景音恢复应该看什么时机
+您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview
 
 ## 你能用这个 Demo 做什么
 
@@ -36,33 +24,16 @@
 ## 目录说明
 
 - `app/`：Demo Android 应用模块
-- `local-sdk-repo/`：本地 Maven 仓库目录，仅在 SDK 维护者显式启用本地模式时才会用到；普通接入方可以忽略
 
 ## 使用前准备
 
-### 1. 默认使用 Maven Central
-
-如果你已经发布了 SDK，直接执行：
+### 1. 构建 Demo
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-### 2. 可选：仅 SDK 维护 / 联调时使用的本地仓库模式
-
-如果你只是接入公开 SDK，可以跳过这一节。
-
-本仓库保留了 `-PuseLocalSdkRepo=true` 开关，供 SDK 维护者在本地联调 `local-sdk-repo/` 时使用。
-
-只有在你已经准备好了仓库根目录下的 `local-sdk-repo/` 后，才需要显式启用：
-
-```bash
-./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
-```
-
-如果目录缺失或结构不对，Gradle 会直接报错。
-
-### 3. 准备连接参数
+### 2. 准备连接参数
 
 Demo 运行时需要你自己填写以下参数：
 
@@ -70,6 +41,7 @@ Demo 运行时需要你自己填写以下参数：
 - `Access Key ID`
 - `Access Key Secret`
 - `Integration App ID`
+- `End User ID`
 - `Soul ID`
 - `WS URL`
 - `Protocol Version`
@@ -80,9 +52,11 @@ Demo 运行时需要你自己填写以下参数：
 
 - `Integration App ID` 填的是控制台“应用中心”列表里展示的 `app_id`。
 - 当前值格式是字符串，例如 `app_g1ht6a8o`。
+- `End User ID` 填的是 App 侧真实终端用户的稳定唯一标识，例如 `user_10001`。
+- 如果要验证记忆能力，`End User ID` 不能多个用户共用，也不应该在同一用户身上频繁变化。
 - `Soul ID` 填的是元神配置里的稳定标识，例如 `soul_acme_companion_main_v1`。
 
-这些值不会在仓库中提供真实默认值。请使用你自己的测试环境配置。
+这些值不会在仓库中提供你的正式业务默认值。请根据自己的测试环境或业务环境填写。
 
 ## 如何运行
 
@@ -96,7 +70,7 @@ Demo 运行时需要你自己填写以下参数：
 
 ### 命令行
 
-在仓库根目录执行默认 Maven Central 模式：
+在仓库根目录执行：
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -114,7 +88,7 @@ Demo 运行时需要你自己填写以下参数：
 
 - 一个内置应用
 - 一组内置 API Key
-- 四个内置元神
+- 多个内置聊天助手元神
 
 首次运行后，你可以直接使用这套内置配置进行体验；如果之前改过配置，也可以在设置页点击 `Restore Defaults` 恢复为内置值，再返回主页面点击 `Connect` 开始体验。
 
@@ -133,12 +107,13 @@ Demo 运行时需要你自己填写以下参数：
 | `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内置 API Key ID |
 | `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内置 API Key Secret |
 | `Integration App ID` | `app_remav935` | 内置应用 ID |
+| `End User ID` | `sdk-demo-ghtao-01` | Demo 默认终端用户 ID；用于隔离记忆体验 |
 | `Protocol Version` | `1` | 协议版本 |
 | `Logical Device ID` | `app.demo.device-001` | 默认逻辑设备 ID |
 | `Logical Client ID` | `sdk.demo.client-001` | 默认逻辑客户端 ID |
 | `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 当前默认元神；也可以改成下表中的任意一个内置聊天助手元神 |
 
-内置的 4 个聊天助手元神 `soul_id` 如下：
+内置的聊天助手元神 `soul_id` 如下：
 
 | 元神名称 | `soul_id` |
 |---|---|
@@ -146,6 +121,7 @@ Demo 运行时需要你自己填写以下参数：
 | 聊天助手（中文男生） | `soul_demo_chinese_male_chat_assistant_v1` |
 | 聊天助手（日文女生） | `soul_demo_japanese_female_chat_assistant_v1` |
 | 聊天助手（日文男生） | `soul_demo_japanese_male_chat_assistant_v1` |
+| 聊天助手（中日女生） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
 
 如果你想快速体验不同元神，最直接的方式就是进入设置页，只修改 `Soul ID` 字段为上面任意一个值，保存后重新连接。
 
@@ -158,7 +134,7 @@ Demo 运行时需要你自己填写以下参数：
 - 查看当前 SDK 名称和版本
 - 切换主页面展示语言（中文 / 日文）
 - 打开设置页填写连接参数
-- 使用内置下拉框快速切换四个默认元神
+- 使用内置下拉框快速切换默认元神
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
 - `Send Text`
@@ -595,9 +571,12 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 其中：
 
-- `MainActivity.java`：展示连接、收音、发文本、语言切换、元神切换、事件监听、本地工具注册和日志排查的完整流程
-- `AppPrefs.java`：展示如何管理连接参数
-- `DebugOpenApiSessionTokenProvider.java`：展示如何在示例工程中获取 `session token`
+### 使用时要注意
+
+- 不同真实用户不要共用同一个 `End User ID`，否则记忆会串。
+- 同一个真实用户不要今天用 `user_10001`、明天改成 `user_10001_v2`，否则会被视为新的用户。
+- 刚说过的话不一定会立刻在当前轮生效；记忆通常需要在后续对话中逐步体现。
+- `Restore Defaults` 会把 `End User ID` 恢复成 Demo 默认值 `sdk-demo-ghtao-01`，这只适合单人联调用途。
 
 ## 重要说明
 
@@ -621,7 +600,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 如果你要测试 `Start Listen`，请确认设备已经授予 `RECORD_AUDIO` 权限。
 
-### 4. GitHub Releases 中的 APK 仅用于公开测试演示
+### 3. GitHub Releases 中的 APK 仅用于公开测试演示
 
 仓库 Release 页面提供的 APK 仅用于公开测试和试用演示，不代表正式发布签名体系。
 
@@ -635,8 +614,9 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 请检查：
 
-- 默认模式下，检查 Maven Central 上是否已经发布该版本，以及当前网络是否能访问 Maven Central
-- 只有在你明确启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.9/`
+- 当前网络是否正常
+- Android Studio / Gradle 环境是否完整
+- 是否按本文步骤在仓库根目录执行了构建命令
 
 ### 点击 Connect 后失败
 
@@ -646,7 +626,8 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - `WS URL` 是否正确
 - `Access Key ID / Secret` 是否正确
 - `Integration App ID` 是否填写为应用中心展示的字符串 `app_id`，例如 `app_g1ht6a8o`
-- `Soul ID`、`Protocol Version` 是否匹配服务端要求
+- 如果要验证记忆能力，`End User ID` 是否已填写为当前真实用户的稳定唯一标识
+- `Soul ID`、`Protocol Version` 是否正确
 
 ### 连接成功但无法开麦
 
