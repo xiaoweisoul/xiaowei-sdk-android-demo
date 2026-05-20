@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.0`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.1`，并验证最小会话闭环。
 
 公开接入默认走 `mavenCentral()`。普通接入方通常只需要这一条路径；`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景。
 
@@ -154,7 +154,8 @@ Demo 运行时需要你自己填写以下参数：
 - 打开设置页填写连接参数
 - 使用下拉框快速切换当前可用元神
 - `Connect / Disconnect`
-- `Start Listen / Stop Listen`
+- `Realtime / Manual` 语音输入模式切换
+- `Manual` 模式下按住说话、松开发送
 - `Send Text`
 - 清空日志、查看会话状态和日志输出
 - 观察平台效果器状态日志、MCP 工具调用日志与表情动画反馈
@@ -178,6 +179,27 @@ Demo 运行时需要你自己填写以下参数：
 设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
 
 设置页里的 `End User ID` 建议直接填写真实终端用户的稳定唯一标识，尤其是在验证记忆能力时。
+
+## 语音输入模式与 `abort` 语义
+
+当前 Demo 把“收音模式”和“打断 AI 回复”分成了两类动作，建议按下面的方式理解：
+
+- `Realtime`
+  - 连接后进入持续收音。
+  - 由服务端按实时对话策略决定何时提交输入、何时收口。
+- `Manual`
+  - 按住大圆按钮开始收音。
+  - 松开按钮时发送 `stopListen()`，作为本轮语音输入的显式收口。
+  - 如果当前 AI 还在说话，再次按下前会先发送 `abortSpeaking()`，再开始本轮 manual 收音。
+- `abortSpeaking()`
+  - 只负责请求服务端立刻中止当前 assistant 回复。
+  - 不会断开连接。
+  - 不会替代 `stopListen()`。
+  - 不会主动停止当前 realtime 收音。
+
+因此，如果宿主在 `Realtime` 模式下误调用 `abortSpeaking()`，最常见的现象是“当前 AI 回复被打断，但实时收音还在继续”。这不是模式切换错误，而是接口职责本身如此。
+
+如果你只想结束收音，请调用 `stopListen()`；如果你只想打断 AI 当前播报，请调用 `abortSpeaking()`。这两个动作在宿主侧应该明确区分。
 
 ## 输出生命周期说明
 
@@ -646,7 +668,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.0/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.1/`
 
 ### 点击 Connect 后失败
 

@@ -8,6 +8,8 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.MotionEvent;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.AdapterView;
@@ -17,6 +19,8 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.LinearLayout;
+import android.widget.RadioButton;
+import android.widget.RadioGroup;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -33,6 +37,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import vip.xiaoweisoul.sdk.sessioncore.AudioPreprocessStatus;
 import vip.xiaoweisoul.sdk.sessioncore.AssistantSentenceEvent;
+import vip.xiaoweisoul.sdk.sessioncore.ListeningMode;
 import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
 import vip.xiaoweisoul.sdk.sessioncore.SessionConfig;
 import vip.xiaoweisoul.sdk.sessioncore.SessionEventListener;
@@ -90,6 +95,12 @@ public class MainActivity extends AppCompatActivity {
     private Button connectButton;
     private Button listenButton;
     private Button sendTextButton;
+    private Button manualListenButton;
+    private TextView voiceModeLabelText;
+    private RadioGroup voiceModeGroup;
+    private RadioButton voiceModeManualRadio;
+    private RadioButton voiceModeRealtimeRadio;
+    private TextView voiceModeSummaryText;
     private Spinner soulSelectorSpinner;
     private ImageButton clearLogsButton;
     private LottieAnimationView expressionAnimationView;
@@ -107,7 +118,12 @@ public class MainActivity extends AppCompatActivity {
     private boolean listening;
     private boolean listenActionRunning;
     private boolean suppressSoulSelectorCallback;
+    private boolean suppressVoiceModeCallback;
     private boolean soulProfilesLoading;
+    private boolean manualPressing;
+    private boolean manualStopPendingAfterStart;
+    private boolean manualAwaitingCommit;
+    private boolean assistantSpeaking;
     private final List<SoulProfileOption> soulProfiles = new ArrayList<>();
     private SessionState currentSessionState = SessionState.DISCONNECTED;
 
@@ -193,6 +209,12 @@ public class MainActivity extends AppCompatActivity {
         connectButton = findViewById(R.id.button_connect);
         listenButton = findViewById(R.id.button_listen);
         sendTextButton = findViewById(R.id.button_send_text);
+        manualListenButton = findViewById(R.id.button_manual_listen);
+        voiceModeLabelText = findViewById(R.id.text_voice_mode_label);
+        voiceModeGroup = findViewById(R.id.group_voice_mode);
+        voiceModeManualRadio = findViewById(R.id.radio_voice_mode_manual);
+        voiceModeRealtimeRadio = findViewById(R.id.radio_voice_mode_realtime);
+        voiceModeSummaryText = findViewById(R.id.text_voice_mode_summary);
         soulSelectorSpinner = findViewById(R.id.spinner_soul_selector);
         clearLogsButton = findViewById(R.id.button_clear_logs);
         expressionAnimationView = findViewById(R.id.view_expression_animation);
@@ -250,6 +272,7 @@ public class MainActivity extends AppCompatActivity {
                 if (disconnected) {
                     resetClientInputSequence();
                     resetListenState();
+                    assistantSpeaking = false;
                     stopAssistantPlayback();
                 }
                 updateActionButtons(state);
@@ -260,6 +283,10 @@ public class MainActivity extends AppCompatActivity {
             public void onUserInputCommitted(UserInputCommittedEvent event) {
                 String source = safe(event.getSource());
                 String text = safe(event.getText());
+                if (manualAwaitingCommit && "asr".equals(source)) {
+                    manualAwaitingCommit = false;
+                    updateActionButtons(currentSessionState);
+                }
                 appendLog("[用户输入已确认]"
                         + " source=" + displayValue(source)
                         + " turnId=" + displayValue(event.getTurnId())
@@ -277,6 +304,7 @@ public class MainActivity extends AppCompatActivity {
             public void onAssistantSentence(AssistantSentenceEvent event) {
                 String state = safe(event.getState());
                 if (AssistantSentenceEvent.STATE_START.equals(state)) {
+                    assistantSpeaking = true;
                     AssistantResponseTracker.SentenceSnapshot snapshot = assistantResponseTracker.recordSentenceStart(event);
                     appendLog("[AI文本句子]"
                             + " index=" + displayValue(event.getIndex())
@@ -293,6 +321,7 @@ public class MainActivity extends AppCompatActivity {
                         player.interruptAndSuppressResponseFromServer(event.getResponseId(), event.getStopReason());
                     }
                 }
+                assistantSpeaking = false;
                 appendLog("[AI回复结束]"
                         + " turnId=" + displayValue(event.getTurnId())
                         + " responseId=" + displayValue(event.getResponseId())
@@ -372,8 +401,27 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        listenButton.setOnClickListener(v -> onListenButtonClicked());
+        listenButton.setOnClickListener(v -> {
+            if (isManualVoiceModeSelected()) {
+                return;
+            }
+            onListenButtonClicked();
+        });
+        manualListenButton.setOnTouchListener((v, event) -> handleListenButtonTouch(event));
         sendTextButton.setOnClickListener(v -> showSendTextDialog());
+        voiceModeGroup.setOnCheckedChangeListener((group, checkedId) -> {
+            if (suppressVoiceModeCallback) {
+                return;
+            }
+            if (checkedId == R.id.radio_voice_mode_manual) {
+                AppPrefs.setVoiceInputMode(this, AppPrefs.VOICE_INPUT_MODE_MANUAL);
+                appendLog("[UI] 当前语音模式=manual");
+            } else {
+                AppPrefs.setVoiceInputMode(this, AppPrefs.VOICE_INPUT_MODE_REALTIME);
+                appendLog("[UI] 当前语音模式=realtime");
+            }
+            updateActionButtons(currentSessionState);
+        });
         sessionPromptEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             AppPrefs.setSessionPromptEnabled(this, isChecked);
             renderSessionPromptControls();
@@ -494,6 +542,7 @@ public class MainActivity extends AppCompatActivity {
         languageValueText.setText(languageLabel);
         openSettingsButton.setContentDescription(getString(R.string.settings));
         sdkInfoLabelText.setText(getLocalizedText(R.string.sdk_info_label, R.string.sdk_info_label_ja, demoLanguage));
+        voiceModeLabelText.setText(getLocalizedText(R.string.voice_mode_label, R.string.voice_mode_label_ja, demoLanguage));
         soulSelectorLabelText.setText(getLocalizedText(R.string.soul_selector_label, R.string.soul_selector_label_ja, demoLanguage));
         sessionPromptLabelText.setText(getLocalizedText(R.string.session_prompt_label, R.string.session_prompt_label_ja, demoLanguage));
         logsPanelTitleText.setText(getLocalizedText(R.string.logs_panel, R.string.logs_panel_ja, demoLanguage));
@@ -504,8 +553,26 @@ public class MainActivity extends AppCompatActivity {
         }
         refreshSoulSelectorLabels();
         renderSdkInfo();
+        renderVoiceModeControls();
         renderSessionPromptControls();
         updateActionButtons(currentSessionState);
+    }
+
+    /**
+     * 刷新语音模式区块，保证主页面展示与当前 SDK 能力、用户选择保持一致。
+     */
+    private void renderVoiceModeControls() {
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        String voiceMode = getEffectiveVoiceInputMode();
+        suppressVoiceModeCallback = true;
+        voiceModeRealtimeRadio.setText(getLocalizedText(R.string.voice_mode_realtime, R.string.voice_mode_realtime_ja, demoLanguage));
+        voiceModeManualRadio.setText(getLocalizedText(R.string.voice_mode_manual, R.string.voice_mode_manual_ja, demoLanguage));
+        voiceModeGroup.check(AppPrefs.VOICE_INPUT_MODE_MANUAL.equals(voiceMode)
+                ? R.id.radio_voice_mode_manual
+                : R.id.radio_voice_mode_realtime);
+        suppressVoiceModeCallback = false;
+        voiceModeSummaryText.setText(buildVoiceModeSummary(demoLanguage, voiceMode));
+        manualListenButton.setText(resolveManualListenButtonText(demoLanguage));
     }
 
     /**
@@ -820,6 +887,7 @@ public class MainActivity extends AppCompatActivity {
                     + " protocolVersion=" + settings.protocolVersion
                     + " endUserId=" + displayValue(settings.endUserId)
                     + " soulId=" + displayValue(settings.soulId)
+                    + " voiceMode=" + getEffectiveVoiceInputMode()
                     + " helloSessionPromptEnabled=" + sessionPromptEnabled
                     + " helloSessionPromptPresent=" + sessionPromptPresent
                     + " helloSessionPromptLength=" + sessionPrompt.length()
@@ -859,6 +927,82 @@ public class MainActivity extends AppCompatActivity {
         }
         appendLog("[Permission] RECORD_AUDIO 未授权，正在重新请求权限");
         requestRecordAudioPermissionIfNeeded();
+    }
+
+    /**
+     * 处理语音按钮的手势输入；只有 Manual 模式才接管 touch 事件。
+     */
+    private boolean handleListenButtonTouch(@NonNull MotionEvent event) {
+        if (!isManualVoiceModeSelected()) {
+            return false;
+        }
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                onManualListenPressed();
+                return true;
+            case MotionEvent.ACTION_UP:
+                listenButton.performClick();
+                onManualListenReleased();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                onManualListenReleased();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /**
+     * Manual 模式下按下说话按钮时，启动当前一轮 listening。
+     */
+    private void onManualListenPressed() {
+        if (currentSessionState != SessionState.CONNECTED) {
+            appendLog("[Manual] 操作被忽略: 当前未连接");
+            return;
+        }
+        if (!hasRecordAudioPermission()) {
+            appendLog("[Permission] RECORD_AUDIO 未授权，正在重新请求权限");
+            requestRecordAudioPermissionIfNeeded();
+            return;
+        }
+        if (listening || listenActionRunning) {
+            return;
+        }
+        AssistantPcmPlayer player = assistantPcmPlayer;
+        if (player != null) {
+            player.interruptAndSuppressCurrentResponse();
+        }
+        manualPressing = true;
+        manualStopPendingAfterStart = false;
+        manualAwaitingCommit = false;
+        appendLog("[UI] Manual 按下，打断当前播报并开始本轮语音输入");
+        startListenNow();
+    }
+
+    /**
+     * Manual 模式下松开说话按钮时，结束当前一轮 listening 并等待服务端提交最终文本。
+     */
+    private void onManualListenReleased() {
+        if (!manualPressing && !listenActionRunning && !listening) {
+            return;
+        }
+        manualPressing = false;
+        if (currentSessionState != SessionState.CONNECTED) {
+            updateActionButtons(currentSessionState);
+            return;
+        }
+        if (listening) {
+            manualAwaitingCommit = true;
+            appendLog("[UI] Manual 松开，准备发送本轮语音");
+            stopListenNow();
+            return;
+        }
+        if (listenActionRunning) {
+            manualAwaitingCommit = true;
+            manualStopPendingAfterStart = true;
+            appendLog("[UI] Manual 松开，等待收音启动后立即发送");
+            updateActionButtons(currentSessionState);
+        }
     }
 
     /**
@@ -904,16 +1048,39 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 在后台线程里启动 realtime listening。
+     * 在后台线程里启动当前选中模式的 listening。
      */
     private void runStartListen() {
         try {
-            sessionClient.startRealtimeListen();
-            appendLog("[Listen] startRealtimeListen() 成功！");
+            String voiceMode = getEffectiveVoiceInputMode();
+            if (AppPrefs.VOICE_INPUT_MODE_MANUAL.equals(voiceMode)) {
+                abortSpeakingIfNeeded();
+                sessionClient.startListen(ListeningMode.MANUAL);
+            } else {
+                sessionClient.startRealtimeListen();
+            }
+            appendLog("[Listen] startListen() 成功 mode=" + voiceMode);
             finishListenAction(true);
         } catch (Exception e) {
-            appendLog("[Listen] 开始失败: " + e.getMessage());
+            manualStopPendingAfterStart = false;
+            manualAwaitingCommit = false;
+            appendLog("[Listen] 开始失败 mode=" + getEffectiveVoiceInputMode() + " error=" + e.getMessage());
             finishListenAction(false);
+        }
+    }
+
+    /**
+     * Manual 再次按下时，若当前仍有 assistant 回复进行中，则先向服务端发送 abort。
+     */
+    private void abortSpeakingIfNeeded() {
+        if (!assistantSpeaking) {
+            return;
+        }
+        try {
+            sessionClient.abortSpeaking();
+            appendLog("[Listen] abortSpeaking() 返回成功");
+        } catch (Exception e) {
+            appendLog("[Listen] abortSpeaking() 失败 error=" + e.getMessage());
         }
     }
 
@@ -1066,15 +1233,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 在后台线程里结束 realtime listening。
+     * 在后台线程里结束当前一轮 listening。
      */
     private void runStopListen() {
         try {
             sessionClient.stopListen();
-            appendLog("[Listen] stopListen() 返回成功");
+            appendLog("[Listen] stopListen() 返回成功 mode=" + getEffectiveVoiceInputMode());
             finishListenAction(false);
         } catch (Exception e) {
-            appendLog("[Listen] 停止失败: " + e.getMessage());
+            manualAwaitingCommit = false;
+            manualStopPendingAfterStart = false;
+            appendLog("[Listen] 停止失败 mode=" + getEffectiveVoiceInputMode() + " error=" + e.getMessage());
             finishListenAction(true);
         }
     }
@@ -1086,7 +1255,12 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             listening = currentSessionState == SessionState.CONNECTED && shouldBeListening;
             listenActionRunning = false;
+            boolean shouldStopImmediatelyAfterStart = isManualVoiceModeSelected() && manualStopPendingAfterStart && listening;
+            manualStopPendingAfterStart = false;
             updateActionButtons(currentSessionState);
+            if (shouldStopImmediatelyAfterStart) {
+                stopListenNow();
+            }
         });
     }
 
@@ -1164,6 +1338,10 @@ public class MainActivity extends AppCompatActivity {
         currentSessionState = state;
         runOnUiThread(() -> {
             String demoLanguage = AppPrefs.getDemoLanguage(this);
+            String voiceMode = getEffectiveVoiceInputMode();
+            boolean manualMode = AppPrefs.VOICE_INPUT_MODE_MANUAL.equals(voiceMode);
+            boolean canSwitchVoiceMode = state == SessionState.DISCONNECTED
+                    || (state == SessionState.CONNECTED && !listening && !listenActionRunning && !manualAwaitingCommit);
             if (state == SessionState.CONNECTED) {
                 connectButton.setText(getLocalizedText(R.string.disconnect, R.string.disconnect_ja, demoLanguage));
                 connectButton.setEnabled(true);
@@ -1171,17 +1349,28 @@ public class MainActivity extends AppCompatActivity {
                 connectButton.setText(getLocalizedText(R.string.connect, R.string.connect_ja, demoLanguage));
                 connectButton.setEnabled(state == SessionState.DISCONNECTED);
             }
-            listenButton.setText(listening
-                    ? getLocalizedText(R.string.stop_listen, R.string.stop_listen_ja, demoLanguage)
-                    : getLocalizedText(R.string.start_listen, R.string.start_listen_ja, demoLanguage));
+            listenButton.setVisibility(manualMode ? View.GONE : View.VISIBLE);
+            listenButton.setText(resolveVoiceActionButtonText(demoLanguage, manualMode));
             listenButton.setEnabled(state == SessionState.CONNECTED && !listenActionRunning);
             sendTextButton.setEnabled(state == SessionState.CONNECTED);
             sendTextButton.setText(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage));
+            manualListenButton.setVisibility(manualMode ? View.VISIBLE : View.GONE);
+            manualListenButton.setEnabled(manualMode && state == SessionState.CONNECTED && (!listenActionRunning || manualPressing));
+            manualListenButton.setText(resolveManualListenButtonText(demoLanguage));
+            manualListenButton.setCompoundDrawablesWithIntrinsicBounds(0, android.R.drawable.ic_btn_speak_now, 0, 0);
+            manualListenButton.setCompoundDrawablePadding(dp(8));
+            voiceModeGroup.setEnabled(canSwitchVoiceMode);
+            voiceModeManualRadio.setEnabled(canSwitchVoiceMode);
+            voiceModeRealtimeRadio.setEnabled(canSwitchVoiceMode);
+            voiceModeSummaryText.setText(buildVoiceModeSummary(demoLanguage, voiceMode));
             soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED && !soulProfilesLoading && !soulProfiles.isEmpty());
             sessionPromptEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
             editSessionPromptButton.setEnabled(state == SessionState.DISCONNECTED);
+            updateListenButtonIcon(manualMode);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
+            manualListenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
+                    manualListenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
             sendTextButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     sendTextButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
         });
@@ -1193,6 +1382,9 @@ public class MainActivity extends AppCompatActivity {
     private void resetListenState() {
         listening = false;
         listenActionRunning = false;
+        manualPressing = false;
+        manualStopPendingAfterStart = false;
+        manualAwaitingCommit = false;
     }
 
     /**
@@ -1329,6 +1521,99 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private static String displayValue(Number value) {
         return value == null ? "-" : String.valueOf(value);
+    }
+
+    /**
+     * 返回当前 Demo 应生效的语音输入模式。
+     */
+    @NonNull
+    private String getEffectiveVoiceInputMode() {
+        return AppPrefs.getVoiceInputMode(this);
+    }
+
+    /**
+     * 当前是否处于 Manual 语音模式。
+     */
+    private boolean isManualVoiceModeSelected() {
+        return AppPrefs.VOICE_INPUT_MODE_MANUAL.equals(getEffectiveVoiceInputMode());
+    }
+
+    /**
+     * 根据当前模式和状态返回语音操作按钮文案，避免 Manual / Realtime 语义混淆。
+     */
+    @NonNull
+    private String resolveVoiceActionButtonText(@NonNull String language, boolean manualMode) {
+        if (manualMode) {
+            if (manualPressing) {
+                return getLocalizedText(R.string.voice_action_manual_pressing, R.string.voice_action_manual_pressing_ja, language);
+            }
+            if (manualAwaitingCommit) {
+                return getLocalizedText(R.string.voice_action_manual_waiting, R.string.voice_action_manual_waiting_ja, language);
+            }
+            return getLocalizedText(R.string.voice_action_manual_idle, R.string.voice_action_manual_idle_ja, language);
+        }
+        return listening
+                ? getLocalizedText(R.string.voice_action_realtime_listening, R.string.voice_action_realtime_listening_ja, language)
+                : getLocalizedText(R.string.voice_action_realtime_idle, R.string.voice_action_realtime_idle_ja, language);
+    }
+
+    /**
+     * 返回 Manual 大按钮文案；等待识别期间仍允许再次按住，因此空闲态继续展示“按住说话”。
+     */
+    @NonNull
+    private String resolveManualListenButtonText(@NonNull String language) {
+        if (manualPressing) {
+            return getLocalizedText(R.string.voice_action_manual_pressing, R.string.voice_action_manual_pressing_ja, language);
+        }
+        return getLocalizedText(R.string.voice_action_manual_idle, R.string.voice_action_manual_idle_ja, language);
+    }
+
+    /**
+     * 生成语音模式摘要，帮助用户理解当前模式和即时状态。
+     */
+    @NonNull
+    private String buildVoiceModeSummary(@NonNull String language, @NonNull String voiceMode) {
+        if (AppPrefs.VOICE_INPUT_MODE_MANUAL.equals(voiceMode)) {
+            if (manualPressing) {
+                return getLocalizedText(
+                        R.string.voice_mode_summary_manual_pressing,
+                        R.string.voice_mode_summary_manual_pressing_ja,
+                        language
+                );
+            }
+            if (manualAwaitingCommit) {
+                return getLocalizedText(
+                        R.string.voice_mode_summary_manual_waiting,
+                        R.string.voice_mode_summary_manual_waiting_ja,
+                        language
+                );
+            }
+            return getLocalizedText(
+                    R.string.voice_mode_summary_manual_idle,
+                    R.string.voice_mode_summary_manual_idle_ja,
+                    language
+            );
+        }
+        return listening
+                ? getLocalizedText(
+                        R.string.voice_mode_summary_realtime_listening,
+                        R.string.voice_mode_summary_realtime_listening_ja,
+                        language
+                )
+                : getLocalizedText(
+                        R.string.voice_mode_summary_realtime_idle,
+                        R.string.voice_mode_summary_realtime_idle_ja,
+                        language
+                );
+    }
+
+    /**
+     * Manual 模式给按钮加上麦克风图标，Realtime 模式则保持纯文本按钮。
+     */
+    private void updateListenButtonIcon(boolean manualMode) {
+        int startDrawable = manualMode ? android.R.drawable.ic_btn_speak_now : 0;
+        listenButton.setCompoundDrawablesWithIntrinsicBounds(startDrawable, 0, 0, 0);
+        listenButton.setCompoundDrawablePadding(manualMode ? dp(6) : 0);
     }
 
     /**

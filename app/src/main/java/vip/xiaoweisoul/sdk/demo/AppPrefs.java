@@ -61,12 +61,16 @@ final class AppPrefs {
     private static final String KEY_DEMO_LANGUAGE = "demo_language";
     private static final String KEY_SESSION_PROMPT_ENABLED = "session_prompt_enabled";
     private static final String KEY_SESSION_PROMPT_TEXT = "session_prompt_text";
+    private static final String KEY_VOICE_INPUT_MODE = "voice_input_mode";
     static final String DEMO_LANGUAGE_ZH = "zh";
     static final String DEMO_LANGUAGE_JA = "ja";
     static final String TTS_PLAYBACK_STRATEGY_DUCK_OTHERS = "duck_others";
     static final String TTS_PLAYBACK_STRATEGY_PAUSE_OTHERS = "pause_others";
     static final String TTS_PLAYBACK_STRATEGY_MIX_WITH_OTHERS = "mix_with_others";
+    static final String VOICE_INPUT_MODE_MANUAL = "manual";
+    static final String VOICE_INPUT_MODE_REALTIME = "realtime";
     private static final String DEFAULT_TTS_PLAYBACK_STRATEGY = TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
+    private static final String DEFAULT_VOICE_INPUT_MODE = VOICE_INPUT_MODE_REALTIME;
     private static final boolean DEFAULT_SESSION_PROMPT_ENABLED = false;
     private static final String DEFAULT_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
             + "\n"
@@ -306,6 +310,21 @@ final class AppPrefs {
     }
 
     /**
+     * 读取主页面当前选择的语音输入模式；默认 realtime。
+     */
+    @NonNull
+    static String getVoiceInputMode(@NonNull Context context) {
+        return normalizeVoiceInputMode(getConfigString(context, KEY_VOICE_INPUT_MODE, DEFAULT_VOICE_INPUT_MODE));
+    }
+
+    /**
+     * 保存主页面当前选择的语音输入模式。
+     */
+    static void setVoiceInputMode(@NonNull Context context, @NonNull String value) {
+        putString(context, KEY_VOICE_INPUT_MODE, normalizeVoiceInputMode(value));
+    }
+
+    /**
      * 读取连接时是否显式携带 hello.session_config.prompt。
      */
     static boolean isSessionPromptEnabled(@NonNull Context context) {
@@ -481,6 +500,14 @@ final class AppPrefs {
     @NonNull
     private static String normalizeDemoLanguage(@NonNull String value) {
         return DEMO_LANGUAGE_JA.equals(value.trim()) ? DEMO_LANGUAGE_JA : DEMO_LANGUAGE_ZH;
+    }
+
+    /**
+     * 归一化主页面语音输入模式；当前只支持 manual / realtime。
+     */
+    @NonNull
+    private static String normalizeVoiceInputMode(@NonNull String value) {
+        return VOICE_INPUT_MODE_MANUAL.equals(value.trim()) ? VOICE_INPUT_MODE_MANUAL : VOICE_INPUT_MODE_REALTIME;
     }
 
     /**
