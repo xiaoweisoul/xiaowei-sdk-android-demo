@@ -1,13 +1,16 @@
 package vip.xiaoweisoul.sdk.demo;
 
+import android.animation.ValueAnimator;
 import android.Manifest;
 import android.content.Intent;
+import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.Bundle;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,7 +20,9 @@ import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
@@ -30,11 +35,16 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.graphics.ColorUtils;
+import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
 import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.android.material.shape.CornerFamily;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.ShapeAppearanceModel;
 import vip.xiaoweisoul.sdk.sessioncore.AudioPreprocessStatus;
 import vip.xiaoweisoul.sdk.sessioncore.AssistantSentenceEvent;
 import vip.xiaoweisoul.sdk.sessioncore.ListeningMode;
@@ -71,6 +81,17 @@ public class MainActivity extends AppCompatActivity {
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
     private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 60 * 1000;
+    private static final long MANUAL_PANEL_EXPAND_DURATION_MS = 220L;
+    private static final long MANUAL_PANEL_COLLAPSE_DURATION_MS = 150L;
+    private static final float MANUAL_PANEL_OVERLAY_ALPHA = 0.72f;
+    private static final int MANUAL_PANEL_IDLE_HEIGHT_DP = 56;
+    private static final int MANUAL_PANEL_EXPANDED_HEIGHT_DP = 150;
+    private static final int MANUAL_PANEL_IDLE_SIDE_MARGIN_DP = 16;
+    private static final int MANUAL_PANEL_IDLE_BOTTOM_MARGIN_DP = 16;
+    private static final int MANUAL_PANEL_IDLE_CORNER_DP = 4;
+    private static final int MANUAL_PANEL_EXPANDED_TOP_CORNER_DP = 42;
+    private static final int MANUAL_PANEL_CONTENT_BOTTOM_PADDING_DP = 72;
+    private static final int MANUAL_PANEL_ACTIVE_TEXT_OFFSET_DP = 12;
 
     // 所有会话动作都串行提交，避免多按钮并发触发状态竞争。
     private final ExecutorService sessionExecutor = Executors.newSingleThreadExecutor();
@@ -88,14 +109,23 @@ public class MainActivity extends AppCompatActivity {
 
     // 按文档建议，Demo 在单次连接内用简单自增数字生成 client_input_id。
     private int nextClientInputSequence = 1;
+    private final FastOutSlowInInterpolator manualPanelInterpolator = new FastOutSlowInInterpolator();
 
     private LinearLayout languageButtonContainer;
     private ImageButton languageButton;
     private ImageButton openSettingsButton;
+    private LinearLayout mainContentLayout;
     private Button connectButton;
     private Button listenButton;
     private Button sendTextButton;
-    private Button manualListenButton;
+    private View manualOverlayView;
+    private FrameLayout manualListenPanel;
+    private LinearLayout manualListenIdleContent;
+    private LinearLayout manualListenActiveContent;
+    private ImageView manualListenIdleIcon;
+    private ImageView manualListenPressedIcon;
+    private TextView manualListenIdleText;
+    private TextView manualListenReleaseText;
     private LinearLayout voiceModeSectionLayout;
     private TextView voiceModeLabelText;
     private RadioGroup voiceModeGroup;
@@ -118,6 +148,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView logsPanelTitleText;
     private TextView logsText;
     private ScrollView logsScrollView;
+    private MaterialShapeDrawable manualListenPanelBackground;
+    private ValueAnimator manualListenPanelAnimator;
+    private float manualListenPanelProgress;
+    private int mainContentBaseBottomPadding;
     private boolean listening;
     private boolean listenActionRunning;
     private boolean suppressSoulSelectorCallback;
@@ -140,6 +174,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ensureAssistantPcmPlayerConfigured(false);
         bindViews();
+        setupManualListenPanel();
         bindSoulSelector();
         bindSessionListener();
         registerMcpTools();
@@ -179,6 +214,10 @@ public class MainActivity extends AppCompatActivity {
             assistantPcmPlayer.release();
             assistantPcmPlayer = null;
         }
+        if (manualListenPanelAnimator != null) {
+            manualListenPanelAnimator.cancel();
+            manualListenPanelAnimator = null;
+        }
         sessionExecutor.shutdownNow();
         soulProfileExecutor.shutdownNow();
         super.onDestroy();
@@ -209,10 +248,18 @@ public class MainActivity extends AppCompatActivity {
         languageButtonContainer = findViewById(R.id.button_language_container);
         languageButton = findViewById(R.id.button_language);
         openSettingsButton = findViewById(R.id.button_open_settings);
+        mainContentLayout = findViewById(R.id.layout_main_content);
         connectButton = findViewById(R.id.button_connect);
         listenButton = findViewById(R.id.button_listen);
         sendTextButton = findViewById(R.id.button_send_text);
-        manualListenButton = findViewById(R.id.button_manual_listen);
+        manualOverlayView = findViewById(R.id.view_manual_overlay);
+        manualListenPanel = findViewById(R.id.layout_manual_listen_panel);
+        manualListenIdleContent = findViewById(R.id.layout_manual_listen_idle_content);
+        manualListenActiveContent = findViewById(R.id.layout_manual_listen_active_content);
+        manualListenIdleIcon = findViewById(R.id.image_manual_listen_icon);
+        manualListenPressedIcon = findViewById(R.id.image_manual_listen_pressed_icon);
+        manualListenIdleText = findViewById(R.id.text_manual_listen_idle);
+        manualListenReleaseText = findViewById(R.id.text_manual_listen_release);
         voiceModeSectionLayout = findViewById(R.id.layout_voice_mode_section);
         voiceModeLabelText = findViewById(R.id.text_voice_mode_label);
         voiceModeGroup = findViewById(R.id.group_voice_mode);
@@ -235,6 +282,21 @@ public class MainActivity extends AppCompatActivity {
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
+        mainContentBaseBottomPadding = mainContentLayout.getPaddingBottom();
+    }
+
+    /**
+     * 初始化 Manual 按住说话面板的背景和默认视觉状态。
+     */
+    private void setupManualListenPanel() {
+        manualListenPanelBackground = new MaterialShapeDrawable();
+        manualListenPanelBackground.setShadowCompatibilityMode(MaterialShapeDrawable.SHADOW_COMPAT_MODE_NEVER);
+        manualListenPanel.setBackground(manualListenPanelBackground);
+        manualOverlayView.setOnClickListener(v -> {
+            // 蒙版只负责阻断底层交互，不额外触发任何动作。
+        });
+        syncManualListenPressedIconSize();
+        applyManualListenPanelProgress(0f, false);
     }
 
     /**
@@ -413,7 +475,7 @@ public class MainActivity extends AppCompatActivity {
             }
             onListenButtonClicked();
         });
-        manualListenButton.setOnTouchListener((v, event) -> handleListenButtonTouch(event));
+        manualListenPanel.setOnTouchListener((v, event) -> handleListenButtonTouch(event));
         sendTextButton.setOnClickListener(v -> showSendTextDialog());
         voiceModeGroup.setOnCheckedChangeListener((group, checkedId) -> {
             if (suppressVoiceModeCallback) {
@@ -578,7 +640,12 @@ public class MainActivity extends AppCompatActivity {
                 : R.id.radio_voice_mode_realtime);
         suppressVoiceModeCallback = false;
         voiceModeSummaryText.setText(buildVoiceModeSummary(demoLanguage, voiceMode));
-        manualListenButton.setText(resolveManualListenButtonText(demoLanguage));
+        manualListenIdleText.setText(resolveManualListenButtonText(demoLanguage));
+        manualListenReleaseText.setText(getLocalizedText(
+                R.string.voice_action_manual_pressing,
+                R.string.voice_action_manual_pressing_ja,
+                demoLanguage
+        ));
     }
 
     /**
@@ -947,7 +1014,7 @@ public class MainActivity extends AppCompatActivity {
                 onManualListenPressed();
                 return true;
             case MotionEvent.ACTION_UP:
-                listenButton.performClick();
+                manualListenPanel.performClick();
                 onManualListenReleased();
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -1361,11 +1428,6 @@ public class MainActivity extends AppCompatActivity {
             listenButton.setEnabled(state == SessionState.CONNECTED && !listenActionRunning);
             sendTextButton.setEnabled(state == SessionState.CONNECTED);
             sendTextButton.setText(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage));
-            manualListenButton.setVisibility(manualMode && state != SessionState.DISCONNECTED ? View.VISIBLE : View.GONE);
-            manualListenButton.setEnabled(manualMode && state == SessionState.CONNECTED && (!listenActionRunning || manualPressing));
-            manualListenButton.setText(resolveManualListenButtonText(demoLanguage));
-            manualListenButton.setCompoundDrawablesWithIntrinsicBounds(0, android.R.drawable.ic_btn_speak_now, 0, 0);
-            manualListenButton.setCompoundDrawablePadding(dp(8));
             voiceModeSectionLayout.setVisibility(showSetupSections ? View.VISIBLE : View.GONE);
             voiceModeGroup.setEnabled(canSwitchVoiceMode);
             voiceModeManualRadio.setEnabled(canSwitchVoiceMode);
@@ -1379,11 +1441,135 @@ public class MainActivity extends AppCompatActivity {
             updateListenButtonIcon(manualMode);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
-            manualListenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
-                    manualListenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
             sendTextButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     sendTextButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
+            syncManualListenPanel(demoLanguage, manualMode, state);
         });
+    }
+
+    /**
+     * 根据连接态和按压态刷新 Manual 底部面板；视觉动画和交互启用在这里统一收口。
+     */
+    private void syncManualListenPanel(@NonNull String language, boolean manualMode, @NonNull SessionState state) {
+        boolean showPanel = manualMode && state != SessionState.DISCONNECTED;
+        boolean expanded = showPanel && manualPressing;
+        boolean enabled = showPanel && state == SessionState.CONNECTED && (!listenActionRunning || manualPressing);
+        manualListenIdleText.setText(resolveManualListenButtonText(language));
+        manualListenReleaseText.setText(getLocalizedText(
+                R.string.voice_action_manual_pressing,
+                R.string.voice_action_manual_pressing_ja,
+                language
+        ));
+        manualListenPanel.setContentDescription(expanded
+                ? manualListenReleaseText.getText()
+                : manualListenIdleText.getText());
+        updateMainContentBottomPadding(showPanel);
+        if (!showPanel) {
+            if (manualListenPanelAnimator != null) {
+                manualListenPanelAnimator.cancel();
+                manualListenPanelAnimator = null;
+            }
+            manualListenPanel.setVisibility(View.GONE);
+            applyManualListenPanelProgress(0f, false);
+            return;
+        }
+        manualListenPanel.setVisibility(View.VISIBLE);
+        manualListenPanel.setEnabled(enabled);
+        manualListenPanel.setClickable(true);
+        if (Math.abs(manualListenPanelProgress - (expanded ? 1f : 0f)) < 0.001f) {
+            applyManualListenPanelProgress(manualListenPanelProgress, enabled);
+            return;
+        }
+        animateManualListenPanel(expanded, enabled);
+    }
+
+    /**
+     * 让默认态按钮和吸底半弧面板之间以同一个容器连续过渡，避免生硬切换。
+     */
+    private void animateManualListenPanel(boolean expand, boolean enabled) {
+        if (manualListenPanelAnimator != null) {
+            manualListenPanelAnimator.cancel();
+        }
+        float targetProgress = expand ? 1f : 0f;
+        manualListenPanelAnimator = ValueAnimator.ofFloat(manualListenPanelProgress, targetProgress);
+        manualListenPanelAnimator.setDuration(expand ? MANUAL_PANEL_EXPAND_DURATION_MS : MANUAL_PANEL_COLLAPSE_DURATION_MS);
+        manualListenPanelAnimator.setInterpolator(manualPanelInterpolator);
+        manualListenPanelAnimator.addUpdateListener(animation ->
+                applyManualListenPanelProgress((float) animation.getAnimatedValue(), enabled));
+        manualListenPanelAnimator.start();
+    }
+
+    /**
+     * 按当前进度应用蒙版透明度、面板尺寸、圆角和文案切换。
+     */
+    private void applyManualListenPanelProgress(float progress, boolean enabled) {
+        manualListenPanelProgress = progress;
+        float clampedProgress = Math.max(0f, Math.min(1f, progress));
+        int idleHeight = dp(MANUAL_PANEL_IDLE_HEIGHT_DP);
+        int expandedHeight = dp(MANUAL_PANEL_EXPANDED_HEIGHT_DP);
+        int idleSideMargin = dp(MANUAL_PANEL_IDLE_SIDE_MARGIN_DP);
+        int idleBottomMargin = dp(MANUAL_PANEL_IDLE_BOTTOM_MARGIN_DP);
+        int idleCorner = dp(MANUAL_PANEL_IDLE_CORNER_DP);
+        int expandedTopCorner = dp(MANUAL_PANEL_EXPANDED_TOP_CORNER_DP);
+        int activeTextOffset = dp(MANUAL_PANEL_ACTIVE_TEXT_OFFSET_DP);
+
+        FrameLayout.LayoutParams layoutParams = (FrameLayout.LayoutParams) manualListenPanel.getLayoutParams();
+        layoutParams.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+        layoutParams.height = lerpInt(idleHeight, expandedHeight, clampedProgress);
+        layoutParams.leftMargin = lerpInt(idleSideMargin, 0, clampedProgress);
+        layoutParams.rightMargin = lerpInt(idleSideMargin, 0, clampedProgress);
+        layoutParams.bottomMargin = lerpInt(idleBottomMargin, 0, clampedProgress);
+        manualListenPanel.setLayoutParams(layoutParams);
+
+        int disabledColor = ContextCompat.getColor(this, R.color.demo_button_disabled);
+        int idleColor = ContextCompat.getColor(this, R.color.demo_primary_dark);
+        int pressedColor = ContextCompat.getColor(this, R.color.demo_primary);
+        int panelColor = enabled
+                ? ColorUtils.blendARGB(idleColor, pressedColor, clampedProgress)
+                : disabledColor;
+        float topCornerRadius = lerpInt(idleCorner, expandedTopCorner, clampedProgress);
+        float bottomCornerRadius = lerpInt(idleCorner, 0, clampedProgress);
+        ShapeAppearanceModel shapeAppearanceModel = new ShapeAppearanceModel.Builder()
+                .setTopLeftCorner(CornerFamily.ROUNDED, topCornerRadius)
+                .setTopRightCorner(CornerFamily.ROUNDED, topCornerRadius)
+                .setBottomLeftCorner(CornerFamily.ROUNDED, bottomCornerRadius)
+                .setBottomRightCorner(CornerFamily.ROUNDED, bottomCornerRadius)
+                .build();
+        manualListenPanelBackground.setShapeAppearanceModel(shapeAppearanceModel);
+        manualListenPanelBackground.setFillColor(ColorStateList.valueOf(panelColor));
+
+        float contentAlpha = 1f - clampedProgress;
+        manualListenIdleContent.setAlpha(contentAlpha);
+        manualListenIdleContent.setTranslationY(clampedProgress * dp(8));
+        manualListenActiveContent.setAlpha(clampedProgress * (enabled ? 1f : 0.82f));
+        manualListenActiveContent.setTranslationY((1f - clampedProgress) * activeTextOffset);
+        int foregroundColor = ContextCompat.getColor(this, R.color.demo_text_inverse);
+        manualListenIdleIcon.setColorFilter(foregroundColor);
+        manualListenPressedIcon.setColorFilter(foregroundColor);
+        manualListenIdleIcon.setAlpha(enabled ? 1f : 0.78f);
+        manualListenIdleText.setAlpha(enabled ? 1f : 0.82f);
+
+        float overlayAlpha = MANUAL_PANEL_OVERLAY_ALPHA * clampedProgress;
+        manualOverlayView.setAlpha(overlayAlpha);
+        boolean showOverlay = overlayAlpha > 0.01f;
+        manualOverlayView.setVisibility(showOverlay ? View.VISIBLE : View.GONE);
+        manualOverlayView.setClickable(showOverlay);
+    }
+
+    /**
+     * 给主内容区补足底部留白，避免默认态底部按钮压住日志面板和其他控件。
+     */
+    private void updateMainContentBottomPadding(boolean showManualPanel) {
+        int bottomPadding = mainContentBaseBottomPadding + (showManualPanel ? dp(MANUAL_PANEL_CONTENT_BOTTOM_PADDING_DP) : 0);
+        if (mainContentLayout.getPaddingBottom() == bottomPadding) {
+            return;
+        }
+        mainContentLayout.setPadding(
+                mainContentLayout.getPaddingLeft(),
+                mainContentLayout.getPaddingTop(),
+                mainContentLayout.getPaddingRight(),
+                bottomPadding
+        );
     }
 
     /**
@@ -1482,6 +1668,26 @@ public class MainActivity extends AppCompatActivity {
      */
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * 在线性动画里把两个整数区间按进度插值，统一给尺寸和圆角使用。
+     */
+    private int lerpInt(int start, int end, float progress) {
+        return Math.round(start + (end - start) * progress);
+    }
+
+    /**
+     * 让按住态麦克风图标跟随“松开发送”字号，避免图标与文字比例失衡。
+     */
+    private void syncManualListenPressedIconSize() {
+        int iconSize = Math.round(manualListenReleaseText.getTextSize() * 4f);
+        int iconTopMargin = Math.max(dp(4), Math.round(manualListenReleaseText.getTextSize() * 0.28f));
+        LinearLayout.LayoutParams iconParams = (LinearLayout.LayoutParams) manualListenPressedIcon.getLayoutParams();
+        iconParams.width = iconSize;
+        iconParams.height = iconSize;
+        iconParams.topMargin = iconTopMargin;
+        manualListenPressedIcon.setLayoutParams(iconParams);
     }
 
     /**

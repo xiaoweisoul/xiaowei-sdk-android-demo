@@ -71,12 +71,12 @@
     <string name="voice_mode_manual_ja">Manual</string>
     <string name="voice_mode_realtime">Realtime</string>
     <string name="voice_mode_realtime_ja">Realtime</string>
-    <string name="voice_mode_summary_manual_idle">Manual：按住下方圆形按钮说话，松开发送。</string>
-    <string name="voice_mode_summary_manual_idle_ja">Manual: 下の丸いボタンを押して話し、離すと送信します。</string>
+    <string name="voice_mode_summary_manual_idle">Manual：按住底部按钮说话，松开发送。</string>
+    <string name="voice_mode_summary_manual_idle_ja">Manual: 下部ボタンを押して話し、離すと送信します。</string>
     <string name="voice_mode_summary_manual_pressing">Manual：正在录音，松开后立即发送。</string>
     <string name="voice_mode_summary_manual_pressing_ja">Manual: 録音中です。離すとすぐ送信します。</string>
-    <string name="voice_mode_summary_manual_waiting">Manual：本轮语音已发送；需要打断时可再次按住下方按钮。</string>
-    <string name="voice_mode_summary_manual_waiting_ja">Manual: 今回の音声は送信済みです。割り込みたい場合は下のボタンをもう一度押してください。</string>
+    <string name="voice_mode_summary_manual_waiting">Manual：本轮语音已发送；需要打断时可再次按住底部按钮。</string>
+    <string name="voice_mode_summary_manual_waiting_ja">Manual: 今回の音声は送信済みです。割り込みたい場合は下部ボタンをもう一度押してください。</string>
     <string name="voice_mode_summary_realtime_idle">Realtime：点击按钮开始持续收音。</string>
     <string name="voice_mode_summary_realtime_idle_ja">Realtime: ボタンを押すと継続的に録音します。</string>
     <string name="voice_mode_summary_realtime_listening">Realtime：持续收音中，可随时停止。</string>

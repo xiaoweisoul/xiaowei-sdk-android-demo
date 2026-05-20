@@ -11,4 +11,5 @@
     <color name="demo_button_disabled">#C0C4CC</color>
     <color name="demo_panel_bg">#EBEEF5</color>
     <color name="demo_panel_stroke">#D3D9E2</color>
+    <color name="demo_manual_overlay">#660D1B2A</color>
 </resources>
