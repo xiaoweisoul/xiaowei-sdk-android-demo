@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.0.9`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.0`，并验证最小会话闭环。
 
 公开接入默认走 `mavenCentral()`。普通接入方通常只需要这一条路径；`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景。
 
@@ -59,6 +59,16 @@ Demo 运行时需要你自己填写以下参数：
 - `Soul ID` 填的是元神配置里的稳定标识，例如 `soul_acme_companion_main_v1`。
 
 这些值不会在仓库中提供你的正式业务默认值。请根据自己的测试环境或业务环境填写。
+
+此外，当前 Demo 在代码中还会通过 `hello.session_config` 额外上报两项会话级配置，这两项不在设置页中持久化维护：
+
+- `prompt`：用于给当前会话追加一段个性化角色定义提示词
+- `idle_timeout_ms`：用于覆盖当前会话的静音超时配置
+
+这两项默认值定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` 中的：
+
+- `DEMO_HELLO_SESSION_PROMPT`
+- `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS`
 
 ## 如何运行
 
@@ -120,6 +130,7 @@ Demo 运行时需要你自己填写以下参数：
 
 | 元神名称 | `soul_id` |
 |---|---|
+| 通用智能助手 | `soul_demo_chinese_general_ai_assistant_v1` |
 | 聊天助手（中文女生） | `soul_demo_chinese_female_chat_assistant_v1` |
 | 聊天助手（中文男生） | `soul_demo_chinese_male_chat_assistant_v1` |
 | 聊天助手（日文女生） | `soul_demo_japanese_female_chat_assistant_v1` |
@@ -130,6 +141,7 @@ Demo 运行时需要你自己填写以下参数：
 
 1. 等主页面成功加载可用角色列表后，直接用下拉框切换
 2. 或者在设置页里手动修改 `Soul ID` 后重新连接
+3. 如果您想在握手协议里面传入自己的个性化角色提示词，请选择 “通用智能助手” 元神
 
 ## Demo 使用说明
 
@@ -634,7 +646,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.0.9/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.0/`
 
 ### 点击 Connect 后失败
 
@@ -646,6 +658,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - `Integration App ID` 是否填写为应用中心展示的字符串 `app_id`，例如 `app_g1ht6a8o`
 - 如果要验证记忆能力，`End User ID` 是否已填写为当前真实用户的稳定唯一标识
 - `Soul ID`、`Protocol Version` 是否正确
+- 如果服务端返回的是 `invalid hello: ...` 这类握手失败，请再检查 `MainActivity.java` 里硬编码的 `DEMO_HELLO_SESSION_PROMPT` / `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS` 是否符合当前服务端约束
 
 ### 连接成功但无法开麦
 

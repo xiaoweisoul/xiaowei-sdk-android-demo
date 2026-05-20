@@ -11,7 +11,7 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        def useLocalSdkRepo = (gradle.startParameter.projectProperties.get("useLocalSdkRepo") ?: "false").toString().toBoolean()
+        def useLocalSdkRepo = providers.gradleProperty("useLocalSdkRepo").orElse("false").get().toBoolean()
         exclusiveContent {
             forRepository {
                 if (useLocalSdkRepo) {
