@@ -59,12 +59,25 @@ final class AppPrefs {
 
     private static final String KEY_TTS_PLAYBACK_STRATEGY = "tts_playback_strategy";
     private static final String KEY_DEMO_LANGUAGE = "demo_language";
+    private static final String KEY_SESSION_PROMPT_ENABLED = "session_prompt_enabled";
+    private static final String KEY_SESSION_PROMPT_TEXT = "session_prompt_text";
     static final String DEMO_LANGUAGE_ZH = "zh";
     static final String DEMO_LANGUAGE_JA = "ja";
     static final String TTS_PLAYBACK_STRATEGY_DUCK_OTHERS = "duck_others";
     static final String TTS_PLAYBACK_STRATEGY_PAUSE_OTHERS = "pause_others";
     static final String TTS_PLAYBACK_STRATEGY_MIX_WITH_OTHERS = "mix_with_others";
     private static final String DEFAULT_TTS_PLAYBACK_STRATEGY = TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
+    private static final boolean DEFAULT_SESSION_PROMPT_ENABLED = false;
+    private static final String DEFAULT_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
+            + "\n"
+            + "【广告内容】\n"
+            + "这是 Fire Suppressor Pro 便携式灭火器的核心规格参数。产品采用固体药柱和常压储存设计，无需维护，可在紧急情况下快速投入使用。通过先进的纳米粒子气溶胶灭火技术，实现更广范围和更高效率的灭火效果。产品支持十秒极速灭火，喷射距离大于三米，喷射时间超过八秒，并能够在零下三十度到七十度环境下稳定工作。适用于A类、B类、C类、E类以及厨房火灾等多种火情，广泛应用于办公室、家庭、工厂、车辆、船舶、飞机和实验室等场景。\n"
+            + "\n"
+            + "【讲解要求】\n"
+            + "1. 围绕上述内容进行讲解，可以适当扩展，但不要偏离主题\n"
+            + "2. 使用自然流畅的口语表达\n"
+            + "3. 语气亲切、专业、有吸引力\n"
+            + "4. 长度适中，3-5句话";
 
     /**
      * 工具类不允许实例化。
@@ -293,6 +306,37 @@ final class AppPrefs {
     }
 
     /**
+     * 读取连接时是否显式携带 hello.session_config.prompt。
+     */
+    static boolean isSessionPromptEnabled(@NonNull Context context) {
+        return getPreferences(context).getBoolean(KEY_SESSION_PROMPT_ENABLED, DEFAULT_SESSION_PROMPT_ENABLED);
+    }
+
+    /**
+     * 保存连接时是否显式携带 hello.session_config.prompt。
+     */
+    static void setSessionPromptEnabled(@NonNull Context context, boolean enabled) {
+        putBoolean(context, KEY_SESSION_PROMPT_ENABLED, enabled);
+    }
+
+    /**
+     * 读取当前保存的 Session Prompt 文本。
+     *
+     * 不存在时才回退到公开默认值；如果用户明确清空并保存，则保留空串。
+     */
+    @NonNull
+    static String getSessionPrompt(@NonNull Context context) {
+        return getDraftString(context, KEY_SESSION_PROMPT_TEXT, DEFAULT_SESSION_PROMPT);
+    }
+
+    /**
+     * 保存当前 Session Prompt 文本。
+     */
+    static void setSessionPrompt(@NonNull Context context, @NonNull String value) {
+        putString(context, KEY_SESSION_PROMPT_TEXT, normalizeDraftText(value));
+    }
+
+    /**
      * 把持久化值转换成更适合展示和日志排查的策略名称。
      */
     @NonNull
@@ -390,6 +434,13 @@ final class AppPrefs {
      */
     private static void putString(@NonNull Context context, @NonNull String key, @NonNull String value) {
         getPreferences(context).edit().putString(key, value).apply();
+    }
+
+    /**
+     * 持久化一个布尔字段。
+     */
+    private static void putBoolean(@NonNull Context context, @NonNull String key, boolean value) {
+        getPreferences(context).edit().putBoolean(key, value).apply();
     }
 
     /**

@@ -64,17 +64,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String EMPTY_TOOL_INPUT_SCHEMA_JSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
-    // Demo 直接在代码中演示 hello.session_config.prompt；留空表示本次握手不上报该字段。
-    private static final String DEMO_HELLO_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
-            + "\n"
-            + "【广告内容】\n"
-            + "这是 Fire Suppressor Pro 便携式灭火器的核心规格参数。产品采用固体药柱和常压储存设计，无需维护，可在紧急情况下快速投入使用。通过先进的纳米粒子气溶胶灭火技术，实现更广范围和更高效率的灭火效果。产品支持十秒极速灭火，喷射距离大于三米，喷射时间超过八秒，并能够在零下三十度到七十度环境下稳定工作。适用于A类、B类、C类、E类以及厨房火灾等多种火情，广泛应用于办公室、家庭、工厂、车辆、船舶、飞机和实验室等场景。\n"
-            + "\n"
-            + "【讲解要求】\n"
-            + "1. 围绕上述内容进行讲解，可以适当扩展，但不要偏离主题\n"
-            + "2. 使用自然流畅的口语表达\n"
-            + "3. 语气亲切、专业、有吸引力\n"
-            + "4. 长度适中，3-5句话";
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
     private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 60 * 1000;
 
@@ -108,6 +97,10 @@ public class MainActivity extends AppCompatActivity {
     private TextView sdkInfoValueText;
     private TextView languageValueText;
     private TextView soulSelectorLabelText;
+    private TextView sessionPromptLabelText;
+    private CheckBox sessionPromptEnabledCheckBox;
+    private Button editSessionPromptButton;
+    private TextView sessionPromptSummaryText;
     private TextView logsPanelTitleText;
     private TextView logsText;
     private ScrollView logsScrollView;
@@ -207,6 +200,10 @@ public class MainActivity extends AppCompatActivity {
         sdkInfoValueText = findViewById(R.id.text_sdk_value);
         languageValueText = findViewById(R.id.text_language_value);
         soulSelectorLabelText = findViewById(R.id.text_soul_selector_label);
+        sessionPromptLabelText = findViewById(R.id.text_session_prompt_label);
+        sessionPromptEnabledCheckBox = findViewById(R.id.checkbox_session_prompt_enabled);
+        editSessionPromptButton = findViewById(R.id.button_edit_session_prompt);
+        sessionPromptSummaryText = findViewById(R.id.text_session_prompt_summary);
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
@@ -377,6 +374,11 @@ public class MainActivity extends AppCompatActivity {
 
         listenButton.setOnClickListener(v -> onListenButtonClicked());
         sendTextButton.setOnClickListener(v -> showSendTextDialog());
+        sessionPromptEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            AppPrefs.setSessionPromptEnabled(this, isChecked);
+            renderSessionPromptControls();
+        });
+        editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
     }
 
@@ -493,6 +495,7 @@ public class MainActivity extends AppCompatActivity {
         openSettingsButton.setContentDescription(getString(R.string.settings));
         sdkInfoLabelText.setText(getLocalizedText(R.string.sdk_info_label, R.string.sdk_info_label_ja, demoLanguage));
         soulSelectorLabelText.setText(getLocalizedText(R.string.soul_selector_label, R.string.soul_selector_label_ja, demoLanguage));
+        sessionPromptLabelText.setText(getLocalizedText(R.string.session_prompt_label, R.string.session_prompt_label_ja, demoLanguage));
         logsPanelTitleText.setText(getLocalizedText(R.string.logs_panel, R.string.logs_panel_ja, demoLanguage));
         clearLogsButton.setContentDescription(getLocalizedText(R.string.clear_logs, R.string.clear_logs_ja, demoLanguage));
         if (TextUtils.equals(logsText.getText(), getString(R.string.logs_empty))
@@ -501,7 +504,29 @@ public class MainActivity extends AppCompatActivity {
         }
         refreshSoulSelectorLabels();
         renderSdkInfo();
+        renderSessionPromptControls();
         updateActionButtons(currentSessionState);
+    }
+
+    /**
+     * 刷新 Session Prompt 相关控件的文案与摘要，让“是否携带”和“当前内容”可见。
+     */
+    private void renderSessionPromptControls() {
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        boolean enabled = AppPrefs.isSessionPromptEnabled(this);
+        String prompt = AppPrefs.getSessionPrompt(this);
+        sessionPromptEnabledCheckBox.setText(getLocalizedText(
+                R.string.session_prompt_enabled_checkbox,
+                R.string.session_prompt_enabled_checkbox_ja,
+                demoLanguage
+        ));
+        sessionPromptEnabledCheckBox.setChecked(enabled);
+        editSessionPromptButton.setText(getLocalizedText(
+                R.string.session_prompt_edit_button,
+                R.string.session_prompt_edit_button_ja,
+                demoLanguage
+        ));
+        sessionPromptSummaryText.setText(buildSessionPromptSummary(demoLanguage, enabled, prompt));
     }
 
     /**
@@ -763,6 +788,9 @@ public class MainActivity extends AppCompatActivity {
     private void runConnect() {
         try {
             AppPrefs.ConnectionSettings settings = AppPrefs.loadConnectionSettings(this);
+            String sessionPrompt = AppPrefs.getSessionPrompt(this);
+            boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
+            boolean sessionPromptPresent = sessionPromptEnabled && !sessionPrompt.trim().isEmpty();
             DebugOpenApiSessionTokenProvider provider = new DebugOpenApiSessionTokenProvider(
                     settings.openApiBaseUrl,
                     settings.accessKeyId,
@@ -779,8 +807,8 @@ public class MainActivity extends AppCompatActivity {
                     .setLogicalDeviceId(requireNonBlank(settings.logicalDeviceId, "logicalDeviceId"))
                     .setLogicalClientId(requireNonBlank(settings.logicalClientId, "logicalClientId"))
                     .setSessionTokenProvider(provider);
-            if (!DEMO_HELLO_SESSION_PROMPT.trim().isEmpty()) {
-                configBuilder.setSessionPrompt(DEMO_HELLO_SESSION_PROMPT);
+            if (sessionPromptPresent) {
+                configBuilder.setSessionPrompt(sessionPrompt);
             }
             if (DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS != null) {
                 configBuilder.setSessionIdleTimeoutMs(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS);
@@ -792,7 +820,9 @@ public class MainActivity extends AppCompatActivity {
                     + " protocolVersion=" + settings.protocolVersion
                     + " endUserId=" + displayValue(settings.endUserId)
                     + " soulId=" + displayValue(settings.soulId)
-                    + " helloSessionPromptPresent=" + String.valueOf(!DEMO_HELLO_SESSION_PROMPT.trim().isEmpty())
+                    + " helloSessionPromptEnabled=" + sessionPromptEnabled
+                    + " helloSessionPromptPresent=" + sessionPromptPresent
+                    + " helloSessionPromptLength=" + sessionPrompt.length()
                     + " helloSessionIdleTimeoutMs=" + displayValue(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS));
             sessionClient.connect(config);
             appendLog("[Connect] connect() 成功！");
@@ -951,6 +981,72 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
+     * 弹出 Session Prompt 查看/编辑对话框；保存后写回 AppPrefs，供下一次 connect() 使用。
+     */
+    private void showSessionPromptDialog() {
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(20);
+        container.setPadding(padding, dp(16), padding, 0);
+
+        TextView hintText = new TextView(this);
+        hintText.setText(getLocalizedText(
+                R.string.session_prompt_dialog_hint,
+                R.string.session_prompt_dialog_hint_ja,
+                demoLanguage
+        ));
+        hintText.setTextColor(ContextCompat.getColor(this, R.color.demo_text_secondary));
+        container.addView(hintText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        EditText promptEdit = new EditText(this);
+        promptEdit.setMinLines(10);
+        promptEdit.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        promptEdit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        promptEdit.setHint(getLocalizedText(
+                R.string.session_prompt_dialog_input_hint,
+                R.string.session_prompt_dialog_input_hint_ja,
+                demoLanguage
+        ));
+        promptEdit.setText(AppPrefs.getSessionPrompt(this));
+        promptEdit.setSelection(promptEdit.getText().length());
+        LinearLayout.LayoutParams promptParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        promptParams.topMargin = dp(12);
+        container.addView(promptEdit, promptParams);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getLocalizedText(
+                        R.string.session_prompt_dialog_title,
+                        R.string.session_prompt_dialog_title_ja,
+                        demoLanguage
+                ))
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(getLocalizedText(R.string.save, R.string.save_ja, demoLanguage), null)
+                .create();
+
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String prompt = promptEdit.getText().toString();
+            AppPrefs.setSessionPrompt(this, prompt);
+            renderSessionPromptControls();
+            appendLog("[UI] 已保存 Session Prompt length=" + prompt.length());
+            dialog.dismiss();
+        }));
+        dialog.show();
+        promptEdit.requestFocus();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+    }
+
+    /**
      * 在后台线程中发送一条文本输入。
      */
     private void runSendText(@NonNull String text, boolean interrupt, @NonNull String clientInputId) {
@@ -1082,6 +1178,8 @@ public class MainActivity extends AppCompatActivity {
             sendTextButton.setEnabled(state == SessionState.CONNECTED);
             sendTextButton.setText(getLocalizedText(R.string.send_text, R.string.send_text_ja, demoLanguage));
             soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED && !soulProfilesLoading && !soulProfiles.isEmpty());
+            sessionPromptEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
+            editSessionPromptButton.setEnabled(state == SessionState.DISCONNECTED);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
             sendTextButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
@@ -1231,6 +1329,39 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private static String displayValue(Number value) {
         return value == null ? "-" : String.valueOf(value);
+    }
+
+    /**
+     * 生成主页面 Session Prompt 摘要，避免长 prompt 完整铺开占满首页。
+     */
+    @NonNull
+    private String buildSessionPromptSummary(@NonNull String language, boolean enabled, @NonNull String prompt) {
+        String normalized = prompt.trim();
+        if (normalized.isEmpty()) {
+            return getLocalizedText(
+                    enabled ? R.string.session_prompt_summary_enabled_empty : R.string.session_prompt_summary_disabled_empty,
+                    enabled ? R.string.session_prompt_summary_enabled_empty_ja : R.string.session_prompt_summary_disabled_empty_ja,
+                    language
+            );
+        }
+        String preview = abbreviatePromptPreview(normalized);
+        int length = prompt.length();
+        int resId = AppPrefs.DEMO_LANGUAGE_JA.equals(language)
+                ? (enabled ? R.string.session_prompt_summary_enabled_ja : R.string.session_prompt_summary_disabled_ja)
+                : (enabled ? R.string.session_prompt_summary_enabled : R.string.session_prompt_summary_disabled);
+        return getString(resId, length, preview);
+    }
+
+    /**
+     * 把长 prompt 收敛成单行预览，便于首页快速判断当前配置内容。
+     */
+    @NonNull
+    private String abbreviatePromptPreview(@NonNull String prompt) {
+        String preview = prompt.replace('\r', ' ').replace('\n', ' ').trim();
+        if (preview.length() <= 48) {
+            return preview;
+        }
+        return preview.substring(0, 48) + "...";
     }
 
     /**
