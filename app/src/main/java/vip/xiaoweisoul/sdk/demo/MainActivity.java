@@ -76,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
             + "3. 语气亲切、专业、有吸引力\n"
             + "4. 长度适中，3-5句话";
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
-    private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 180000;
+    private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 60 * 1000;
 
     // 所有会话动作都串行提交，避免多按钮并发触发状态竞争。
     private final ExecutorService sessionExecutor = Executors.newSingleThreadExecutor();
