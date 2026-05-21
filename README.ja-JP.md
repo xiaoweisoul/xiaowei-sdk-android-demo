@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.0.9` をアプリへ組み込み、最小構成の会話フローを確認できます。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.1.2` をアプリへ組み込み、最小構成の会話フローを確認できます。
 
 公開向けの通常利用では `mavenCentral()` からの取得で十分です。`-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証時だけ使う想定です。
 
@@ -24,6 +24,8 @@
 - 長い応答、複数文のテキスト、`barge_in` 割り込み、ローカル PCM 再生の収束タイミングの理解
 - メイン画面の言語切り替え、利用可能な元神の読み込み / 切り替え、ログ確認の流れ
 - 録音前処理ステータス、Assistant PCM 再生、ローカルツール呼び出しの確認
+- MCP ツールごとの任意 `waitingMessage` と、サーバー側デフォルト待機文言へのフォールバック動作の確認
+- サーバーからの WebSocket close frame が発生した場合に、`[Session]` ログで `closeCode / closeReason` を確認する方法
 
 SDK を組み込むこと自体が目的であれば、この Demo を直接改造する必要はありません。通常は次の順番で確認することを推奨します。
 
@@ -165,6 +167,7 @@ SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 - `[AI回复汇总]`: Demo が `responseId` ごとに集約した全文プレビュー
 - `[TtsPlayer] [本地播放开始]`: ホストアプリ側のローカル再生チェーンが実際に開始した
 - `[TtsPlayer] [本地播放收口]`: Demo 側のローカル再生チェーンがアイドルへ戻り始めた。広告挿入タイミングの参考に近い
+- `[Session]`: `SessionStateEvent.toString()` をそのまま出力する。サーバーが WebSocket close frame を返した場合は `closeCode` と `closeReason` もここに表示される
 
 ### 設定画面
 
@@ -175,6 +178,21 @@ SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 設定画面の `Integration App ID` は文字列として保存・送信され、`app_xxxxxxxx` 形式をそのまま入力できます。
 
 設定画面の `End User ID` には、特に記憶機能を試す場合、実際の利用者を継続して識別できる安定 ID を入れてください。
+
+### Demo 内蔵 MCP ツール
+
+現在の Demo は `MainActivity.registerMcpTools()` で次の 4 つの最小表情ツールを登録しています。
+
+- `show_expression(name)`: `happy / cry / cold` を受け付ける。現在は `waitingMessage` を明示設定していない
+- `show_dance()`: ダンスアニメーションを表示する。現在は `waitingMessage` を明示設定していない
+- `show_monkey()`: 猿のコミカルなアニメーションを表示する。`waitingMessage="哈哈，请稍后"`
+- `return_to_idle()`: 現在の表情をクリアして待機状態へ戻す。現在は `waitingMessage` を明示設定していない
+
+補足:
+
+- `waitingMessage` が未設定、`null`、または空白文字列だけの場合、サーバーはツール経路が約 `700ms` を超えても可聴テキストがまだ無いとき、既定待機文言 `请稍等一下，处理中~` へフォールバックします
+- `waitingMessage` を trim した結果が `30` 文字を超えると、サーバーはその `tools/list` を不正メタデータとして扱い、WebSocket `StatusPolicyViolation` で切断します
+- SDK はこの長さ超過をローカルで遮断しません。Demo では `[Session]` ログにサーバー返却の `closeCode / closeReason` がそのまま出るため、原因を追いやすくなっています
 
 ## 出力ライフサイクルの説明
 
@@ -647,7 +665,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` を自分で有効にしている場合のみ、`local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.0.9/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.1.2/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 
