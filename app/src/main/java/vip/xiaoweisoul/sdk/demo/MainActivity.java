@@ -31,6 +31,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -85,11 +86,11 @@ public class MainActivity extends AppCompatActivity {
     private static final long MANUAL_PANEL_COLLAPSE_DURATION_MS = 150L;
     private static final float MANUAL_PANEL_OVERLAY_ALPHA = 0.72f;
     private static final int MANUAL_PANEL_IDLE_HEIGHT_DP = 56;
-    private static final int MANUAL_PANEL_EXPANDED_HEIGHT_DP = 150;
+    private static final int MANUAL_PANEL_EXPANDED_HEIGHT_DP = 120;
     private static final int MANUAL_PANEL_IDLE_SIDE_MARGIN_DP = 16;
     private static final int MANUAL_PANEL_IDLE_BOTTOM_MARGIN_DP = 16;
     private static final int MANUAL_PANEL_IDLE_CORNER_DP = 4;
-    private static final int MANUAL_PANEL_EXPANDED_TOP_CORNER_DP = 42;
+    private static final int MANUAL_PANEL_EXPANDED_TOP_CORNER_DP = 80;
     private static final int MANUAL_PANEL_CONTENT_BOTTOM_PADDING_DP = 72;
     private static final int MANUAL_PANEL_ACTIVE_TEXT_OFFSET_DP = 12;
 
@@ -767,6 +768,10 @@ public class MainActivity extends AppCompatActivity {
                 return "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"enum\":[\"happy\",\"cry\",\"cold\"]}},\"required\":[\"name\"],\"additionalProperties\":false}";
             }
 
+            public String getWaitingMessage() {
+                return null;
+            }
+
             @Override
             public String invoke(@NonNull String argumentsJson) {
                 String expressionName = parseBasicExpressionName(argumentsJson);
@@ -774,34 +779,9 @@ public class MainActivity extends AppCompatActivity {
                 return "emoji displayed: " + expressionName;
             }
         });
-        registerFixedExpressionTool("show_dance", "显示跳舞动画，适用于活跃气氛、庆祝、表演等场景。", "dance");
-        registerFixedExpressionTool("show_monkey", "显示猴子搞怪动画，适用于调皮、卖萌、整活等场景。", "monkey");
-        registerFixedExpressionTool("go_idle", "让角色回到默认待机状态，不再展示任何表情或动作动画。适用于结束表情、恢复正常、回到默认状态等场景。", null);
-        sessionClient.registerTool(new SessionTool() {
-            @NonNull
-            @Override
-            public String getName() {
-                return "return_to_idle";
-            }
-
-            @NonNull
-            @Override
-            public String getDescription() {
-                return "让角色回到默认待机状态，不再展示任何表情或动作动画。适用于结束表情、恢复正常、回到默认状态等场景。";
-            }
-
-            @NonNull
-            @Override
-            public String getInputSchemaJson() {
-                return EMPTY_TOOL_INPUT_SCHEMA_JSON;
-            }
-
-            @Override
-            public String invoke(@NonNull String argumentsJson) {
-                clearExpression();
-                return "returned to idle";
-            }
-        });
+        registerFixedExpressionTool("show_dance", "显示跳舞动画，适用于活跃气氛、庆祝、表演等场景。", "dance", null);
+        registerFixedExpressionTool("show_monkey", "显示猴子搞怪动画，适用于调皮、卖萌、整活等场景。", "monkey", "哈哈，请稍后");
+        registerFixedExpressionTool("return_to_idle", "让角色回到默认待机状态，不再展示任何表情或动作动画。适用于结束表情、恢复正常、回到默认状态等场景。", null,null);
     }
 
     /**
@@ -824,7 +804,12 @@ public class MainActivity extends AppCompatActivity {
     /**
      * 注册一个无参的固定动画工具。
      */
-    private void registerFixedExpressionTool(@NonNull String toolName, @NonNull String description, @NonNull String expressionName) {
+    private void registerFixedExpressionTool(
+            @NonNull String toolName,
+            @NonNull String description,
+            @Nullable String expressionName,
+            @Nullable String waitingMessage
+    ) {
         sessionClient.registerTool(new SessionTool() {
             @NonNull
             @Override
@@ -842,6 +827,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public String getInputSchemaJson() {
                 return EMPTY_TOOL_INPUT_SCHEMA_JSON;
+            }
+
+            public String getWaitingMessage() {
+                return waitingMessage;
             }
 
             @Override

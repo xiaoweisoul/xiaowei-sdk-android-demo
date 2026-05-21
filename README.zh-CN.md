@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.1`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.2`，并验证最小会话闭环。
 
 公开接入默认走 `mavenCentral()`。普通接入方通常只需要这一条路径；`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景。
 
@@ -16,7 +16,8 @@
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
-- 演示如何注册本地工具、触发表情动画并观察工具调用事件
+- 演示如何注册本地工具、配置可选 `waitingMessage`、触发表情动画并观察工具调用事件
+- 演示服务端主动断链时，如何在 `[Session]` 日志里直接看到远端 `closeCode / closeReason`
 
 如果你只是想接 SDK，不一定需要直接修改这个 Demo。通常更推荐：
 
@@ -169,6 +170,7 @@ Demo 运行时需要你自己填写以下参数：
 - `[AI回复汇总]`：Demo 按 `responseId` 聚合后的完整文本预览
 - `[TtsPlayer] [本地播放开始]`：宿主本地播放链路已经启动
 - `[TtsPlayer] [本地播放收口]`：Demo 里的本地播放链路进入收口/空闲态，更接近广告切入参考时机
+- `[Session]`：直接打印 `SessionStateEvent.toString()`；如果服务端下发了 WebSocket close frame，这里会带上 `closeCode` 和 `closeReason`
 
 ### 设置页
 
@@ -179,6 +181,21 @@ Demo 运行时需要你自己填写以下参数：
 设置页里的 `Integration App ID` 现在按字符串保存和提交，允许直接录入 `app_xxxxxxxx` 形式的业务标识。
 
 设置页里的 `End User ID` 建议直接填写真实终端用户的稳定唯一标识，尤其是在验证记忆能力时。
+
+### Demo 内置 MCP 工具
+
+当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 4 个最小表情工具：
+
+- `show_expression(name)`：支持 `happy / cry / cold`，当前未显式设置 `waitingMessage`
+- `show_dance()`：显示跳舞动画，当前未显式设置 `waitingMessage`
+- `show_monkey()`：显示猴子搞怪动画，`waitingMessage="哈哈，请稍后"`
+- `return_to_idle()`：清除当前表情，回到默认待机状态，当前未显式设置 `waitingMessage`
+
+需要注意：
+
+- 当工具没有设置 `waitingMessage`，或者返回的是 `null` / 空白字符串时，服务端在工具路径超过约 `700ms` 且仍无可播文本时，会回退到默认等待语 `请稍等一下，处理中~`
+- 如果某个工具上报的 `waitingMessage` 去空白后超过 `30` 个字，服务端会把这次 `tools/list` 视为非法元数据，并以 WebSocket `StatusPolicyViolation` 主动断开
+- SDK 不会在本地拦截这个长度错误；Demo 的 `[Session]` 日志会直接打印服务端回来的 `closeCode / closeReason`，便于联调排查
 
 ## 语音输入模式与 `abort` 语义
 
@@ -668,7 +685,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.1/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.2/`
 
 ### 点击 Connect 后失败
 
