@@ -31,7 +31,6 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -41,12 +40,11 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
 import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.android.material.shape.CornerFamily;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import vip.xiaoweisoul.sdk.sessioncore.AudioPreprocessStatus;
+import vip.xiaoweisoul.sdk.sessioncore.AssistantEmotionEvent;
 import vip.xiaoweisoul.sdk.sessioncore.AssistantSentenceEvent;
 import vip.xiaoweisoul.sdk.sessioncore.ListeningMode;
 import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
@@ -67,7 +65,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * SDK 接入示例 Demo 主页面。
@@ -80,6 +81,10 @@ public class MainActivity extends AppCompatActivity {
     private static final String EMPTY_TOOL_INPUT_SCHEMA_JSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
+    private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
+    private static final float SCREEN_BRIGHTNESS_DEFAULT = 0.5f;
+    private static final float SCREEN_BRIGHTNESS_MIN = 0.05f;
+    private static final float SCREEN_BRIGHTNESS_MAX = 1.0f;
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
     private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 60 * 1000;
     private static final long MANUAL_PANEL_EXPAND_DURATION_MS = 220L;
@@ -144,6 +149,7 @@ public class MainActivity extends AppCompatActivity {
     private TextView soulSelectorLabelText;
     private TextView sessionPromptLabelText;
     private CheckBox sessionPromptEnabledCheckBox;
+    private CheckBox emotionEnabledCheckBox;
     private Button editSessionPromptButton;
     private TextView sessionPromptSummaryText;
     private TextView logsPanelTitleText;
@@ -278,6 +284,7 @@ public class MainActivity extends AppCompatActivity {
         soulSelectorLabelText = findViewById(R.id.text_soul_selector_label);
         sessionPromptLabelText = findViewById(R.id.text_session_prompt_label);
         sessionPromptEnabledCheckBox = findViewById(R.id.checkbox_session_prompt_enabled);
+        emotionEnabledCheckBox = findViewById(R.id.checkbox_emotion_enabled);
         editSessionPromptButton = findViewById(R.id.button_edit_session_prompt);
         sessionPromptSummaryText = findViewById(R.id.text_session_prompt_summary);
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
@@ -343,6 +350,7 @@ public class MainActivity extends AppCompatActivity {
                     resetListenState();
                     assistantSpeaking = false;
                     stopAssistantPlayback();
+                    clearExpression();
                 }
                 updateActionButtons(state);
                 appendLog("[Session] " + event);
@@ -404,6 +412,16 @@ public class MainActivity extends AppCompatActivity {
                             + " sentenceCount=" + summary.getSentenceCount()
                             + " text=" + summary.getTextPreview());
                 }
+            }
+
+            @Override
+            public void onAssistantEmotion(@NonNull AssistantEmotionEvent event) {
+                String emotion = safe(event.getEmotion());
+                appendLog("[AI表情]"
+                        + " emotion=" + displayValue(emotion)
+                        + " turnId=" + displayValue(event.getTurnId())
+                        + " responseId=" + displayValue(event.getResponseId()));
+                renderAssistantEmotion(emotion);
             }
 
             @Override
@@ -494,6 +512,10 @@ public class MainActivity extends AppCompatActivity {
         sessionPromptEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             AppPrefs.setSessionPromptEnabled(this, isChecked);
             renderSessionPromptControls();
+        });
+        emotionEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            AppPrefs.setEmotionEnabled(this, isChecked);
+            appendLog("[UI] LLM Emotion 下次连接=" + isChecked);
         });
         editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
@@ -655,6 +677,7 @@ public class MainActivity extends AppCompatActivity {
     private void renderSessionPromptControls() {
         String demoLanguage = AppPrefs.getDemoLanguage(this);
         boolean enabled = AppPrefs.isSessionPromptEnabled(this);
+        boolean emotionEnabled = AppPrefs.isEmotionEnabled(this);
         String prompt = AppPrefs.getSessionPrompt(this);
         sessionPromptEnabledCheckBox.setText(getLocalizedText(
                 R.string.session_prompt_enabled_checkbox,
@@ -662,6 +685,12 @@ public class MainActivity extends AppCompatActivity {
                 demoLanguage
         ));
         sessionPromptEnabledCheckBox.setChecked(enabled);
+        emotionEnabledCheckBox.setText(getLocalizedText(
+                R.string.emotion_enabled_checkbox,
+                R.string.emotion_enabled_checkbox_ja,
+                demoLanguage
+        ));
+        emotionEnabledCheckBox.setChecked(emotionEnabled);
         editSessionPromptButton.setText(getLocalizedText(
                 R.string.session_prompt_edit_button,
                 R.string.session_prompt_edit_button_ja,
@@ -749,121 +778,123 @@ public class MainActivity extends AppCompatActivity {
      * 注册 Demo 当前可供服务端调用的最小 MCP 工具集合。
      */
     private void registerMcpTools() {
-        sessionClient.registerTool(new SessionTool() {
-            @NonNull
-            @Override
-            public String getName() {
-                return "show_expression";
-            }
-
-            @NonNull
-            @Override
-            public String getDescription() {
-                return "## 工具作用\n"
-                        + "显示或切换基础表情，仅支持 happy / cry / cold 三种表情。\n\n"
-                        + "## 调用时机\n"
-                        + "- 仅在用户明确要求角色显示、切换或做出某种表情时调用。\n"
-                        + "- 这是有真实副作用的表情工具。\n"
-                        + "- 同一会话中允许重复调用。只要当前用户最新请求仍要求切换或显示表情，就必须重新调用，不能因为上一轮已经显示过某个表情就跳过。\n"
-                        + "- 如果用户请求已经明确且参数可以直接确定，必须直接调用，不要先闲聊，也不要在未调用前口头说已经显示。\n\n"
-                        + "## 规则约束\n"
-                        + "- 不要因为用户在闲聊中提到自己开心、难过或觉得冷，就自动调用。\n"
-                        + "- name=happy 适用于开心、高兴、赞同、鼓励等表情。\n"
-                        + "- name=cry 适用于委屈、难过、想哭、失落等表情。\n"
-                        + "- name=cold 适用于寒冷、尴尬、发抖等表情。\n"
-                        + "- 如果用户要求跳舞、搞怪猴子或恢复待机，应改用对应工具；如果意图不明确或同时表达了多个互斥表情意图，应先澄清，不要猜。";
-            }
-
-            @NonNull
-            @Override
-            public String getInputSchemaJson() {
-                return "{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"enum\":[\"happy\",\"cry\",\"cold\"]}},\"required\":[\"name\"],\"additionalProperties\":false}";
-            }
-
-            public String getWaitingMessage() {
-                return null;
-            }
-
-            @Override
-            public String invoke(@NonNull String argumentsJson) {
-                String expressionName = parseBasicExpressionName(argumentsJson);
-                renderExpression(expressionName);
-                return "emoji displayed: " + expressionName;
-            }
-        });
-        registerFixedExpressionTool(
-                "show_dance",
+        registerDeviceControlTool(
+                "increase_media_volume",
                 "## 工具作用\n"
-                        + "显示跳舞或表演类动画效果。\n\n"
-                        + "## 调用时机\n"
-                        + "- 仅在用户明确要求角色跳舞、来段舞蹈、做庆祝动作、来一段表演时调用。\n"
-                        + "- 这是有真实副作用的动作工具。\n"
-                        + "- 同一会话中允许重复调用。只要当前用户最新请求仍要求跳舞或表演，就必须重新调用，不能因为上一轮已经跳过一次就跳过。\n"
-                        + "- 如果用户请求已经明确，必须直接调用，不要只用文字说“开始跳了”，也不要先闲聊。\n\n"
-                        + "## 规则约束\n"
-                        + "- 它不适用于普通情绪表达、恢复待机或搞怪猴子这类其他动作。\n"
-                        + "- 如果用户同时表达了多个互斥动作意图，应先澄清，不要猜。",
-                "dance",
-                null
+                        + "把当前设备的媒体音量调大 10%。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求调高、增大、提高音量时，必须调用本工具。\n"
+                        + "- 用户说“再大一点”“继续调大”“声音再高一点”等连续控制请求时，也必须再次调用本工具。\n"
+                        + "- 不能只用自然语言说“已经调大了”来代替工具调用。\n\n"
+                        + "## 边界\n"
+                        + "- 只控制 Android STREAM_MUSIC，不控制通话、闹钟或通知音量。\n"
+                        + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                () -> adjustMediaVolume(DEVICE_CONTROL_STEP_PERCENT)
         );
-        registerFixedExpressionTool(
-                "show_monkey",
+        registerDeviceControlTool(
+                "decrease_media_volume",
                 "## 工具作用\n"
-                        + "显示搞怪、卖萌、整活或猴子式夸张动作动画。\n\n"
-                        + "## 调用时机\n"
-                        + "- 仅在用户明确要求角色搞怪、卖萌、整活，或明确想看猴子式搞怪动作时调用。\n"
-                        + "- 这是有真实副作用的动作工具。\n"
-                        + "- 同一会话中允许重复调用。只要当前用户最新请求仍要求搞怪或猴子式动作，就必须重新调用，不能因为上一轮已经做过一次就跳过。\n"
-                        + "- 如果用户请求已经明确，必须直接调用，不要只用文字描述效果，也不要先闲聊。\n\n"
-                        + "## 规则约束\n"
-                        + "- 它不适用于普通开心表情、跳舞或恢复待机。\n"
-                        + "- 如果用户同时表达了多个互斥动作意图，应先澄清，不要猜。",
-                "monkey",
-                "哈哈，请稍后"
+                        + "把当前设备的媒体音量调小 10%。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求调低、减小、降低音量时，必须调用本工具。\n"
+                        + "- 用户说“再小一点”“继续调小”“声音再低一点”等连续控制请求时，也必须再次调用本工具。\n"
+                        + "- 不能只用自然语言说“已经调小了”来代替工具调用。\n\n"
+                        + "## 边界\n"
+                        + "- 只控制 Android STREAM_MUSIC，不控制通话、闹钟或通知音量。\n"
+                        + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                () -> adjustMediaVolume(-DEVICE_CONTROL_STEP_PERCENT)
         );
-        registerFixedExpressionTool(
-                "return_to_idle",
+        registerDeviceControlTool(
+                "increase_screen_brightness",
                 "## 工具作用\n"
-                        + "停止当前正在显示的表情、动作或动画效果，并让角色回到默认待机状态。\n\n"
-                        + "## 调用时机\n"
-                        + "- 仅在用户明确要求停止、结束、取消、去掉、隐藏当前效果，或要求恢复正常、恢复默认、回到待机、清除当前效果时调用。\n"
-                        + "- 这是有真实副作用的状态恢复工具。\n"
-                        + "- 同一会话中允许重复调用。只要当前用户最新请求仍要求清掉当前效果或恢复待机，就必须重新调用，不能因为上一轮已经恢复过就跳过。\n"
-                        + "- 只要用户意图是让当前效果消失，且本轮 tools 中存在此工具，就必须优先调用；不得把这类请求当普通闲聊处理。\n\n"
-                        + "## 规则约束\n"
-                        + "- 不得仅输出“已经恢复正常”“已经停止”“已经隐藏”等文本而不调用工具。\n"
-                        + "- 如果用户同时要求先取消当前效果再做别的动作，应先调用此工具。\n"
-                        + "- 它不适用于直接显示新表情、跳舞或搞怪；这类请求应改用对应工具。",
-                null,
-                null
+                        + "把当前 Demo 页面的屏幕亮度调高 10%。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求调亮、提高亮度或屏幕更亮时，必须调用本工具。\n"
+                        + "- 用户说“再亮一点”“继续调亮”“屏幕再亮一点”等连续控制请求时，也必须再次调用本工具。\n"
+                        + "- 不能只用自然语言说“已经调亮了”来代替工具调用。\n\n"
+                        + "## 边界\n"
+                        + "- 只修改当前 Activity 窗口亮度，不修改系统全局亮度设置。\n"
+                        + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                () -> adjustScreenBrightness(DEVICE_CONTROL_STEP_PERCENT)
+        );
+        registerDeviceControlTool(
+                "decrease_screen_brightness",
+                "## 工具作用\n"
+                        + "把当前 Demo 页面的屏幕亮度调低 10%。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求调暗、降低亮度或屏幕更暗时，必须调用本工具。\n"
+                        + "- 用户说“再暗一点”“继续调暗”“屏幕再暗一点”等连续控制请求时，也必须再次调用本工具。\n"
+                        + "- 不能只用自然语言说“已经调暗了”来代替工具调用。\n\n"
+                        + "## 边界\n"
+                        + "- 只修改当前 Activity 窗口亮度，不修改系统全局亮度设置。\n"
+                        + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                () -> adjustScreenBrightness(-DEVICE_CONTROL_STEP_PERCENT)
         );
     }
 
     /**
-     * 解析基础表情工具参数，只接受 happy/cry/cold。
+     * 展示服务端 emotion 对应的本地动画。
      */
-    @NonNull
-    private String parseBasicExpressionName(@NonNull String argumentsJson) {
-        try {
-            JsonObject root = JsonParser.parseString(argumentsJson).getAsJsonObject();
-            String name = safe(root.has("name") && !root.get("name").isJsonNull() ? root.get("name").getAsString() : "").trim().toLowerCase(Locale.ROOT);
-            if ("happy".equals(name) || "cry".equals(name) || "cold".equals(name)) {
-                return name;
-            }
-            throw new IllegalArgumentException("unsupported expression: " + name);
-        } catch (RuntimeException e) {
-            throw new IllegalArgumentException("invalid arguments: " + e.getMessage(), e);
+    private void renderAssistantEmotion(@NonNull String emotion) {
+        String normalizedEmotion = emotion.trim().toLowerCase(Locale.ROOT);
+        String assetFile = resolveEmotionAssetFile(normalizedEmotion);
+        if (assetFile == null) {
+            appendLog("[AI表情] 暂无本地动画映射: " + normalizedEmotion);
+            return;
+        }
+        renderEmotionAsset(assetFile);
+    }
+
+    /**
+     * 右上角表情区域只播放 LLM emotion 资源，不再被 MCP 工具写入。
+     */
+    private void renderEmotionAsset(@NonNull String assetFile) {
+        runOnUiThread(() -> {
+            expressionAnimationView.cancelAnimation();
+            expressionAnimationView.setVisibility(android.view.View.VISIBLE);
+            expressionAnimationView.setScaleX(1f);
+            expressionAnimationView.setScaleY(1f);
+            expressionAnimationView.setAnimation(assetFile);
+            expressionAnimationView.setRepeatCount(LottieDrawable.INFINITE);
+            expressionAnimationView.playAnimation();
+        });
+    }
+
+    /**
+     * 清空当前动画展示区域。
+     */
+    private void clearExpression() {
+        runOnUiThread(() -> {
+            expressionAnimationView.cancelAnimation();
+            expressionAnimationView.setScaleX(1f);
+            expressionAnimationView.setScaleY(1f);
+            expressionAnimationView.setVisibility(android.view.View.GONE);
+        });
+    }
+
+    private String resolveEmotionAssetFile(@NonNull String emotion) {
+        switch (emotion) {
+            case "neutral":
+            case "happy":
+            case "thinking":
+            case "sad":
+            case "confused":
+            case "love":
+            case "angry":
+            case "sleepy":
+            case "delicious":
+            case "surprised":
+            case "cool":
+                return "emotion/" + emotion + ".json";
+            default:
+                return null;
         }
     }
 
-    /**
-     * 注册一个无参的固定动画工具。
-     */
-    private void registerFixedExpressionTool(
+    private void registerDeviceControlTool(
             @NonNull String toolName,
             @NonNull String description,
-            @Nullable String expressionName,
-            @Nullable String waitingMessage
+            @NonNull DeviceToolAction action
     ) {
         sessionClient.registerTool(new SessionTool() {
             @NonNull
@@ -884,75 +915,111 @@ public class MainActivity extends AppCompatActivity {
                 return EMPTY_TOOL_INPUT_SCHEMA_JSON;
             }
 
-            public String getWaitingMessage() {
-                return waitingMessage;
-            }
-
             @Override
             public String invoke(@NonNull String argumentsJson) {
-                if (expressionName == null) {
-                    clearExpression();
-                    return "returned to idle";
-                }
-                renderExpression(expressionName);
-                return "emoji displayed: " + expressionName;
+                return action.run();
             }
         });
-    }
-
-    /**
-     * 在主页面播放指定表情动画；直接复用 mcpEmoji 下的 Lottie JSON 资源。
-     */
-    private void renderExpression(@NonNull String expressionName) {
-        runOnUiThread(() -> {
-            expressionAnimationView.cancelAnimation();
-            expressionAnimationView.setVisibility(android.view.View.VISIBLE);
-            expressionAnimationView.setScaleX(resolveExpressionScale(expressionName));
-            expressionAnimationView.setScaleY(resolveExpressionScale(expressionName));
-            expressionAnimationView.setAnimation(resolveExpressionAssetFile(expressionName));
-            expressionAnimationView.setRepeatCount(LottieDrawable.INFINITE);
-            expressionAnimationView.playAnimation();
-        });
-    }
-
-    /**
-     * 清空当前动画展示区域。
-     */
-    private void clearExpression() {
-        runOnUiThread(() -> {
-            expressionAnimationView.cancelAnimation();
-            expressionAnimationView.setScaleX(1f);
-            expressionAnimationView.setScaleY(1f);
-            expressionAnimationView.setVisibility(android.view.View.GONE);
-        });
-    }
-
-    private float resolveExpressionScale(@NonNull String expressionName) {
-        switch (expressionName) {
-            case "monkey":
-            case "snail":
-                return 1.18f;
-            default:
-                return 1f;
-        }
     }
 
     @NonNull
-    private String resolveExpressionAssetFile(@NonNull String expressionName) {
-        switch (expressionName) {
-            case "happy":
-                return "mcpEmoji/gao_xing.json";
-            case "cry":
-                return "mcpEmoji/ku_nao.json";
-            case "cold":
-                return "mcpEmoji/han_leng.json";
-            case "dance":
-                return "mcpEmoji/dance.json";
-            case "monkey":
-                return "mcpEmoji/monkey.json";
-            default:
-                throw new IllegalArgumentException("unsupported expression: " + expressionName);
+    private String adjustMediaVolume(int deltaPercent) {
+        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager == null) {
+            throw new IllegalStateException("AudioManager unavailable");
         }
+        int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        if (maxVolume <= 0) {
+            throw new IllegalStateException("media volume is not adjustable");
+        }
+        int currentVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC);
+        int step = Math.max(1, Math.round(maxVolume * Math.abs(deltaPercent) / 100f));
+        int targetVolume = clampInt(currentVolume + (deltaPercent > 0 ? step : -step), 0, maxVolume);
+        if (targetVolume == currentVolume) {
+            int currentPercent = Math.round(currentVolume * 100f / maxVolume);
+            if (deltaPercent > 0) {
+                return "媒体音量已经是最大值 " + currentPercent + "%，无法继续调高。";
+            }
+            return "媒体音量已经是最小值 " + currentPercent + "%，无法继续调低。";
+        }
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI);
+        int percent = Math.round(targetVolume * 100f / maxVolume);
+        return "媒体音量已" + (deltaPercent > 0 ? "调高" : "调低") + "到 " + percent + "%。";
+    }
+
+    @NonNull
+    private String adjustScreenBrightness(int deltaPercent) {
+        if (android.os.Looper.myLooper() == getMainLooper()) {
+            return applyScreenBrightness(deltaPercent);
+        }
+
+        AtomicReference<String> result = new AtomicReference<>();
+        AtomicReference<RuntimeException> error = new AtomicReference<>();
+        CountDownLatch latch = new CountDownLatch(1);
+        runOnUiThread(() -> {
+            try {
+                result.set(applyScreenBrightness(deltaPercent));
+            } catch (RuntimeException e) {
+                error.set(e);
+            } finally {
+                latch.countDown();
+            }
+        });
+        try {
+            boolean done = latch.await(2, TimeUnit.SECONDS);
+            if (!done) {
+                throw new IllegalStateException("screen brightness update timed out");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("screen brightness update interrupted", e);
+        }
+        RuntimeException updateError = error.get();
+        if (updateError != null) {
+            throw updateError;
+        }
+        String value = result.get();
+        if (value == null) {
+            throw new IllegalStateException("screen brightness update failed");
+        }
+        return value;
+    }
+
+    @NonNull
+    private String applyScreenBrightness(int deltaPercent) {
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        float currentBrightness = attributes.screenBrightness >= 0f
+                ? attributes.screenBrightness
+                : SCREEN_BRIGHTNESS_DEFAULT;
+        float targetBrightness = clampFloat(
+                currentBrightness + deltaPercent / 100f,
+                SCREEN_BRIGHTNESS_MIN,
+                SCREEN_BRIGHTNESS_MAX
+        );
+        if (Float.compare(targetBrightness, currentBrightness) == 0) {
+            int currentPercent = Math.round(currentBrightness * 100f);
+            if (deltaPercent > 0) {
+                return "当前页面亮度已经是最大值 " + currentPercent + "%，无法继续调高。";
+            }
+            return "当前页面亮度已经是最小值 " + currentPercent + "%，无法继续调低。";
+        }
+        attributes.screenBrightness = targetBrightness;
+        getWindow().setAttributes(attributes);
+        int percent = Math.round(targetBrightness * 100f);
+        return "当前页面亮度已" + (deltaPercent > 0 ? "调高" : "调低") + "到 " + percent + "%。";
+    }
+
+    private int clampInt(int value, int min, int max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private float clampFloat(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    private interface DeviceToolAction {
+        @NonNull
+        String run();
     }
 
     /**
@@ -975,6 +1042,7 @@ public class MainActivity extends AppCompatActivity {
             String sessionPrompt = AppPrefs.getSessionPrompt(this);
             boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
             boolean sessionPromptPresent = sessionPromptEnabled && !sessionPrompt.trim().isEmpty();
+            boolean emotionEnabled = AppPrefs.isEmotionEnabled(this);
             DebugOpenApiSessionTokenProvider provider = new DebugOpenApiSessionTokenProvider(
                     settings.openApiBaseUrl,
                     settings.accessKeyId,
@@ -990,6 +1058,7 @@ public class MainActivity extends AppCompatActivity {
                     .setProtocolVersion(parseRequiredInt(settings.protocolVersion, "protocolVersion"))
                     .setLogicalDeviceId(requireNonBlank(settings.logicalDeviceId, "logicalDeviceId"))
                     .setLogicalClientId(requireNonBlank(settings.logicalClientId, "logicalClientId"))
+                    .setEmotionEnabled(emotionEnabled)
                     .setSessionTokenProvider(provider);
             if (sessionPromptPresent) {
                 configBuilder.setSessionPrompt(sessionPrompt);
@@ -1008,7 +1077,8 @@ public class MainActivity extends AppCompatActivity {
                     + " helloSessionPromptEnabled=" + sessionPromptEnabled
                     + " helloSessionPromptPresent=" + sessionPromptPresent
                     + " helloSessionPromptLength=" + sessionPrompt.length()
-                    + " helloSessionIdleTimeoutMs=" + displayValue(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS));
+                    + " helloSessionIdleTimeoutMs=" + displayValue(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS)
+                    + " helloEnableEmotion=" + emotionEnabled);
             sessionClient.connect(config);
             appendLog("[Connect] connect() 成功！");
         } catch (Exception e) {
@@ -1481,6 +1551,7 @@ public class MainActivity extends AppCompatActivity {
             sessionPromptSectionLayout.setVisibility(showSetupSections ? View.VISIBLE : View.GONE);
             soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED && !soulProfilesLoading && !soulProfiles.isEmpty());
             sessionPromptEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
+            emotionEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
             editSessionPromptButton.setEnabled(state == SessionState.DISCONNECTED);
             updateListenButtonIcon(manualMode);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,

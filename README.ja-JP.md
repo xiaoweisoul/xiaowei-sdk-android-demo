@@ -2,13 +2,13 @@
 
 本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.1.2` をアプリへ組み込み、最小構成の会話フローを確認できます。
 
-公開向けの通常利用では `mavenCentral()` からの取得で十分です。`-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証時だけ使う想定です。
+現在の emotion 開発ブランチは、まだ Maven Central に公開されていない SDK API に依存しています。そのため Android Studio の Run をそのまま使えるよう、既定ではリポジトリ内の `local-sdk-repo/` を参照します。対応する SDK バージョンを正式公開した後は、`gradle.properties` の `useLocalSdkRepo` を `false` に戻して Maven Central 経路を検証できます。
 
 詳細情報はこちらをご参照ください: http://www.xiaoweisoul.vip/docs/app-access-overview
 
 この README では、基本的な実行方法だけでなく、次のような組み込み時によくある疑問もまとめて扱います。
 
-- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` がそれぞれ何を意味するか
+- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantEmotion`、`onAssistantPcm` がそれぞれ何を意味するか
 - 1 回の長い応答の中で、複数の AI テキスト文と複数の PCM フレームがどう並ぶか
 - `barge_in` や `interrupt=true` のような割り込みをどう理解するか
 - なぜ `onAssistantSentence(state=stop)` が「ローカル再生完了」と同じではないのか
@@ -20,10 +20,10 @@
 - `XiaoweiSessionClient` の作成方法
 - 接続パラメータ、session token、`End User ID` の設定例
 - 接続、テキスト送信、録音開始、イベント受信までの基本フロー
-- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` という主要出力シグナルの理解
+- `onUserInputCommitted`、`onAssistantSentence`、`onAssistantEmotion`、`onAssistantPcm` という主要出力シグナルの理解
 - 長い応答、複数文のテキスト、`barge_in` 割り込み、ローカル PCM 再生の収束タイミングの理解
 - メイン画面の言語切り替え、利用可能な元神の読み込み / 切り替え、ログ確認の流れ
-- 録音前処理ステータス、Assistant PCM 再生、ローカルツール呼び出しの確認
+- 録音前処理ステータス、Assistant PCM 再生、ローカルツール呼び出し、AI emotion 表示の確認
 - MCP ツールごとの任意 `waitingMessage` と、サーバー側デフォルト待機文言へのフォールバック動作の確認
 - サーバーからの WebSocket close frame が発生した場合に、`[Session]` ログで `closeCode / closeReason` を確認する方法
 
@@ -81,18 +81,22 @@ Demo の実行には、次のパラメータが必要です。
 
 ### コマンドライン
 
-リポジトリ直下で次を実行します。
-
-デフォルトの Maven Central モード:
+現在の emotion 開発ブランチは既定で `local-sdk-repo/` を使います。リポジトリ直下で次を実行します。
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
+ローカル SDK リポジトリを明示する場合:
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
+```
+
+対応する SDK バージョンが Maven Central に公開済みで、その経路を検証したい場合:
+
+```bash
+./gradlew -PuseLocalSdkRepo=false :app:assembleDebug
 ```
 
 ## クイック体験
@@ -154,9 +158,10 @@ SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 - ドロップダウンで利用可能な元神を切り替える
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
+- Session Prompt エリアで、次回接続時に LLM Emotion を有効化するか切り替える
 - `Send Text`
 - ログをクリアし、セッション状態とログ出力を確認する
-- 録音前処理ログ、MCP ツール呼び出しログ、表情アニメーションの反映を確認する
+- 録音前処理ログ、MCP ツール呼び出しログ、AI emotion 表情アニメーションの反映を確認する
 
 メイン画面のログでは、特に次のタグを見ることを推奨します。
 
@@ -165,6 +170,7 @@ SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 - `[PCM下发]`: 現在の応答の先頭 PCM フレームが到着した
 - `[AI回复结束]`: サーバー側ではこの応答が終了したが、ローカル再生完了はまだ意味しない
 - `[AI回复汇总]`: Demo が `responseId` ごとに集約した全文プレビュー
+- `[AI表情]`: サーバーからの LLM emotion イベント。右上の表情エリアはこのイベントだけで更新される
 - `[TtsPlayer] [本地播放开始]`: ホストアプリ側のローカル再生チェーンが実際に開始した
 - `[TtsPlayer] [本地播放收口]`: Demo 側のローカル再生チェーンがアイドルへ戻り始めた。広告挿入タイミングの参考に近い
 - `[Session]`: `SessionStateEvent.toString()` をそのまま出力する。サーバーが WebSocket close frame を返した場合は `closeCode` と `closeReason` もここに表示される
@@ -181,15 +187,17 @@ SDK 保守者で、すでに `local-sdk-repo/` を用意済みの場合のみ:
 
 ### Demo 内蔵 MCP ツール
 
-現在の Demo は `MainActivity.registerMcpTools()` で次の 4 つの最小表情ツールを登録しています。
+現在の Demo は `MainActivity.registerMcpTools()` で次の 4 つの最小デバイス制御ツールを登録しています。表情ツールは登録しません。
 
-- `show_expression(name)`: `happy / cry / cold` を受け付ける。現在は `waitingMessage` を明示設定していない
-- `show_dance()`: ダンスアニメーションを表示する。現在は `waitingMessage` を明示設定していない
-- `show_monkey()`: 猿のコミカルなアニメーションを表示する。`waitingMessage="哈哈，请稍后"`
-- `return_to_idle()`: 現在の表情をクリアして待機状態へ戻す。現在は `waitingMessage` を明示設定していない
+- `increase_media_volume()`: メディア音量を約 10% 上げる
+- `decrease_media_volume()`: メディア音量を約 10% 下げる
+- `increase_screen_brightness()`: 現在の Demo Activity のウィンドウ輝度を約 10% 上げる
+- `decrease_screen_brightness()`: 現在の Demo Activity のウィンドウ輝度を約 10% 下げる
 
 補足:
 
+- 右上の表情エリアは `onAssistantEmotion()` だけで更新され、リソースは `app/src/main/assets/emotion/` にあります
+- 4 つのツールはいずれも引数なしです。音量は端末の離散的な音量段階に丸められ、輝度は現在の Activity だけに反映されます
 - `waitingMessage` が未設定、`null`、または空白文字列だけの場合、サーバーはツール経路が約 `700ms` を超えても可聴テキストがまだ無いとき、既定待機文言 `请稍等一下，处理中~` へフォールバックします
 - `waitingMessage` を trim した結果が `30` 文字を超えると、サーバーはその `tools/list` を不正メタデータとして扱い、WebSocket `StatusPolicyViolation` で切断します
 - SDK はこの長さ超過をローカルで遮断しません。Demo では `[Session]` ログにサーバー返却の `closeCode / closeReason` がそのまま出るため、原因を追いやすくなっています
@@ -635,11 +643,11 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - 認証や会話関連の制御は自分の業務バックエンド側で安全に扱う
 - Demo の実装は体験と疎通確認のための参考例として扱う
 
-### 2. この Demo は公開向け SDK 組み込みを主目的とし、デフォルトで Maven Central を使います
+### 2. 現在の emotion 開発ブランチはローカル SDK リポジトリを既定で使います
 
-通常の利用者はデフォルトモードのままで構いません。
+このブランチは、まだ Maven Central に公開されていない emotion SDK API を使います。Android Studio の Run ボタンでそのままビルドできるよう、`gradle.properties` は既定で `useLocalSdkRepo=true` です。
 
-`-PuseLocalSdkRepo=true` は SDK 保守 / ローカル検証用です。
+`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.1.2/` が無い場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。対応する SDK バージョンを正式公開した後は、`useLocalSdkRepo=false` に戻して Maven Central 経路を検証できます。
 
 ### 3. 音声機能にはマイク権限が必要です
 
