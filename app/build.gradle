@@ -1,9 +1,24 @@
 apply plugin: "com.android.application"
 
 def sdkArtifactName = "xiaowei-session-core"
-def sdkVersion = "1.1.2"
+def sdkVersion = "1.1.3"
 def sdkGroupId = "vip.xiaoweisoul.sdk"
-def useLocalSdkRepo = providers.gradleProperty("useLocalSdkRepo").orElse("false").get().toBoolean()
+def localConfig = new Properties()
+def localConfigFile = rootProject.file("local.properties")
+if (localConfigFile.exists()) {
+    localConfigFile.withInputStream { input ->
+        localConfig.load(input)
+    }
+}
+// 提交默认值放在 gradle.properties；本机 Android Studio Run 可用 local.properties 覆盖。
+def useLocalSdkRepoValue = gradle.startParameter.projectProperties.get("useLocalSdkRepo")
+if (useLocalSdkRepoValue == null) {
+    useLocalSdkRepoValue = localConfig.getProperty("useLocalSdkRepo")
+}
+if (useLocalSdkRepoValue == null) {
+    useLocalSdkRepoValue = providers.gradleProperty("useLocalSdkRepo").orElse("false").get()
+}
+def useLocalSdkRepo = useLocalSdkRepoValue.toBoolean()
 def localSdkRepoVersionDir = new File(rootProject.file("local-sdk-repo"), "vip/xiaoweisoul/sdk/session-core/${sdkVersion}")
 def demoSigningPropertiesFile = rootProject.file("signing/demo-release.properties")
 def demoSigningProperties = new Properties()
@@ -34,8 +49,8 @@ android {
         applicationId "vip.xiaoweisoul.sdk.demo"
         minSdk 26
         targetSdk 34
-        versionCode 209
-        versionName "2.0.9"
+        versionCode 210
+        versionName "2.0.10"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
         buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""

@@ -1,8 +1,8 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.2`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.3`，并验证最小会话闭环。
 
-当前 emotion 开发分支依赖尚未发布到 Maven Central 的 SDK API，默认走仓库内 `local-sdk-repo/`，方便 Android Studio 直接点击 Run。对应 SDK 版本正式发布后，可把 `gradle.properties` 里的 `useLocalSdkRepo` 改回 `false` 验证公开 Maven Central 接入路径。
+Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -82,21 +82,29 @@ Demo 运行时需要你自己填写以下参数：
 4. 等待 Gradle Sync 完成
 5. 运行 `app`
 
+如果你要让 Android Studio 的 Run 按钮使用本地 SDK，请先在当前 Demo 仓库根目录的 `local.properties` 中加入：
+
+```properties
+useLocalSdkRepo=true
+```
+
+然后重新 Sync Project，再点击 Run。`local.properties` 是本机文件，不要提交；提交状态下的默认值仍然保持 `useLocalSdkRepo=false`，也就是走 Maven Central。
+
 ### 命令行
 
-当前 emotion 开发分支默认使用 `local-sdk-repo/`，在仓库根目录直接执行：
+默认验证 Maven Central 路径，在仓库根目录直接执行：
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-也可以显式指定本地 SDK 仓库：
+本地 SDK 联调时，显式指定本地 SDK 仓库：
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
 ```
 
-如果要验证 Maven Central 路径，并且对应 SDK 版本已经发布，可以临时执行：
+如果你的本机 `local.properties` 设置了 `useLocalSdkRepo=true`，但临时想验证 Maven Central 路径，可以用命令行覆盖：
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=false :app:assembleDebug
@@ -668,11 +676,13 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - 由业务服务端安全地下发短期 `session token`
 - SDK 再通过 `SessionTokenProvider` 使用这个 token 建连
 
-### 2. 当前 emotion 开发分支默认使用本地 SDK 仓库
+### 2. 本地 SDK 联调方式
 
-当前分支使用了尚未发布到 Maven Central 的 emotion SDK API。为了让 Android Studio Run 按钮直接可用，`gradle.properties` 默认设置为 `useLocalSdkRepo=true`。
+提交默认使用 Maven Central，`gradle.properties` 中的 `useLocalSdkRepo=false` 不要为了本地联调改成 `true` 后提交。
 
-如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.1.2/`，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`。正式发布对应 SDK 版本后，再把 `useLocalSdkRepo` 改回 `false` 验证公开 Maven Central 接入路径。
+如果要本地联调尚未发布或刚改完的 SDK，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`，再在 Demo 本机 `local.properties` 中设置 `useLocalSdkRepo=true`，或在命令行构建时传入 `-PuseLocalSdkRepo=true`。
+
+如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.1.3/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -696,7 +706,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.2/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.3/`
 
 ### 点击 Connect 后失败
 

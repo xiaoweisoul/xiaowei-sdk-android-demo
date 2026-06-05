@@ -1,8 +1,8 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.1.2` をアプリへ組み込み、最小構成の会話フローを確認できます。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.1.3` をアプリへ組み込み、最小構成の会話フローを確認できます。
 
-現在の emotion 開発ブランチは、まだ Maven Central に公開されていない SDK API に依存しています。そのため Android Studio の Run をそのまま使えるよう、既定ではリポジトリ内の `local-sdk-repo/` を参照します。対応する SDK バージョンを正式公開した後は、`gradle.properties` の `useLocalSdkRepo` を `false` に戻して Maven Central 経路を検証できます。
+Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
 詳細情報はこちらをご参照ください: http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -79,9 +79,17 @@ Demo の実行には、次のパラメータが必要です。
 4. Gradle Sync の完了を待つ
 5. `app` を実行する
 
+Android Studio の Run ボタンでローカル SDK を使う場合は、Demo リポジトリ直下の `local.properties` に次を追加します。
+
+```properties
+useLocalSdkRepo=true
+```
+
+その後 Sync Project を実行してから Run します。`local.properties` はローカル専用ファイルなのでコミットしません。コミット済みの既定値は引き続き `useLocalSdkRepo=false`、つまり Maven Central 経路です。
+
 ### コマンドライン
 
-現在の emotion 開発ブランチは既定で `local-sdk-repo/` を使います。リポジトリ直下で次を実行します。
+既定では Maven Central 経路を検証します。リポジトリ直下で次を実行します。
 
 ```bash
 ./gradlew :app:assembleDebug
@@ -93,7 +101,7 @@ Demo の実行には、次のパラメータが必要です。
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
 ```
 
-対応する SDK バージョンが Maven Central に公開済みで、その経路を検証したい場合:
+ローカルの `local.properties` に `useLocalSdkRepo=true` がある状態で、一時的に Maven Central 経路を検証したい場合:
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=false :app:assembleDebug
@@ -643,11 +651,13 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - 認証や会話関連の制御は自分の業務バックエンド側で安全に扱う
 - Demo の実装は体験と疎通確認のための参考例として扱う
 
-### 2. 現在の emotion 開発ブランチはローカル SDK リポジトリを既定で使います
+### 2. ローカル SDK 連携テスト
 
-このブランチは、まだ Maven Central に公開されていない emotion SDK API を使います。Android Studio の Run ボタンでそのままビルドできるよう、`gradle.properties` は既定で `useLocalSdkRepo=true` です。
+コミット済みの既定値は Maven Central を使います。ローカル連携テストのために `gradle.properties` の `useLocalSdkRepo=false` を `true` に変更してコミットしないでください。
 
-`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.1.2/` が無い場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。対応する SDK バージョンを正式公開した後は、`useLocalSdkRepo=false` に戻して Maven Central 経路を検証できます。
+未公開または変更直後の SDK をローカルで確認する場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。その後、Demo のローカル `local.properties` に `useLocalSdkRepo=true` を設定するか、コマンドラインで `-PuseLocalSdkRepo=true` を渡します。
+
+`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.1.3/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
 
 ### 3. 音声機能にはマイク権限が必要です
 
@@ -672,8 +682,8 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - リポジトリ直下でビルドコマンドを実行しているか
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
-- `-PuseLocalSdkRepo=true` を自分で有効にしている場合のみ、`local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.1.2/` が実際に含まれているか
+- `-PuseLocalSdkRepo=true` またはローカルの `local.properties` で `useLocalSdkRepo=true` を有効にしている場合のみ、`local-sdk-repo/` が存在するか
+- `vip/xiaoweisoul/sdk/session-core/1.1.3/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 
