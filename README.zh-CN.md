@@ -16,7 +16,7 @@ Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验�
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
-- 演示如何注册本地工具、配置可选 `waitingMessage`，并通过 MCP 控制媒体音量和当前页面亮度
+- 演示如何注册本地工具、配置可选 `waitingMessage`，并通过 MCP 控制媒体音量和系统全局亮度
 - 演示如何在 hello 阶段启用 LLM Emotion，并在右上角播放对应表情动画
 - 演示服务端主动断链时，如何在 `[Session]` 日志里直接看到远端 `closeCode / closeReason`
 
@@ -205,13 +205,15 @@ useLocalSdkRepo=true
 
 - `increase_media_volume()`：把媒体音量调大约 10%
 - `decrease_media_volume()`：把媒体音量调小约 10%
-- `increase_screen_brightness()`：把当前 Demo Activity 的窗口亮度调高约 10%
-- `decrease_screen_brightness()`：把当前 Demo Activity 的窗口亮度调低约 10%
+- `increase_screen_brightness()`：把系统全局屏幕亮度调高约 10%
+- `decrease_screen_brightness()`：把系统全局屏幕亮度调低约 10%
 
 需要注意：
 
 - 右上角表情区域只由 `onAssistantEmotion()` 驱动，资源位于 `app/src/main/assets/emotion/`
-- 这 4 个工具都是无参工具；音量落到系统离散音量档位，亮度只影响当前 Activity，不修改系统全局亮度
+- 这 4 个工具都是无参工具；音量落到系统离散音量档位，亮度每次都会读取系统当前值，再按完整范围的 10% 步长写回系统全局亮度
+- 如果设备当前处于自动亮度模式，首次亮度工具调用会先切到手动模式
+- 首次使用亮度工具时，系统可能要求授予“修改系统设置”权限；未授权时工具会返回失败并拉起授权页
 - 当工具没有设置 `waitingMessage`，或者返回的是 `null` / 空白字符串时，服务端在工具路径超过约 `700ms` 且仍无可播文本时，会回退到默认等待语 `请稍等一下，处理中~`
 - 如果某个工具上报的 `waitingMessage` 去空白后超过 `30` 个字，服务端会把这次 `tools/list` 视为非法元数据，并以 WebSocket `StatusPolicyViolation` 主动断开
 - SDK 不会在本地拦截这个长度错误；Demo 的 `[Session]` 日志会直接打印服务端回来的 `closeCode / closeReason`，便于联调排查

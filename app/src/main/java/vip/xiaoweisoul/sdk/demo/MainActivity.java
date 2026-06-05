@@ -2,11 +2,14 @@ package vip.xiaoweisoul.sdk.demo;
 
 import android.animation.ValueAnimator;
 import android.Manifest;
+import android.content.ContentResolver;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.util.Log;
@@ -82,9 +85,8 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
-    private static final float SCREEN_BRIGHTNESS_DEFAULT = 0.5f;
-    private static final float SCREEN_BRIGHTNESS_MIN = 0.05f;
-    private static final float SCREEN_BRIGHTNESS_MAX = 1.0f;
+    private static final int SCREEN_BRIGHTNESS_SYSTEM_MIN = 0;
+    private static final int SCREEN_BRIGHTNESS_SYSTEM_MAX = 255;
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
     private static final Integer DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS = 60 * 1000;
     private static final long MANUAL_PANEL_EXPAND_DURATION_MS = 220L;
@@ -807,26 +809,30 @@ public class MainActivity extends AppCompatActivity {
         registerDeviceControlTool(
                 "increase_screen_brightness",
                 "## 工具作用\n"
-                        + "把当前 Demo 页面的屏幕亮度调高 10%。\n\n"
+                        + "把系统全局屏幕亮度调高 10%。\n\n"
                         + "## 必须调用\n"
                         + "- 用户明确要求调亮、提高亮度或屏幕更亮时，必须调用本工具。\n"
                         + "- 用户说“再亮一点”“继续调亮”“屏幕再亮一点”等连续控制请求时，也必须再次调用本工具。\n"
                         + "- 不能只用自然语言说“已经调亮了”来代替工具调用。\n\n"
                         + "## 边界\n"
-                        + "- 只修改当前 Activity 窗口亮度，不修改系统全局亮度设置。\n"
+                        + "- 每次都先读取系统当前亮度，再按完整范围的 10% 步长写回系统全局亮度。\n"
+                        + "- 如果设备当前是自动亮度模式，工具会先切到手动亮度模式。\n"
+                        + "- 首次调用时，系统可能要求用户授予“修改系统设置”权限。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
                 () -> adjustScreenBrightness(DEVICE_CONTROL_STEP_PERCENT)
         );
         registerDeviceControlTool(
                 "decrease_screen_brightness",
                 "## 工具作用\n"
-                        + "把当前 Demo 页面的屏幕亮度调低 10%。\n\n"
+                        + "把系统全局屏幕亮度调低 10%。\n\n"
                         + "## 必须调用\n"
                         + "- 用户明确要求调暗、降低亮度或屏幕更暗时，必须调用本工具。\n"
                         + "- 用户说“再暗一点”“继续调暗”“屏幕再暗一点”等连续控制请求时，也必须再次调用本工具。\n"
                         + "- 不能只用自然语言说“已经调暗了”来代替工具调用。\n\n"
                         + "## 边界\n"
-                        + "- 只修改当前 Activity 窗口亮度，不修改系统全局亮度设置。\n"
+                        + "- 每次都先读取系统当前亮度，再按完整范围的 10% 步长写回系统全局亮度。\n"
+                        + "- 如果设备当前是自动亮度模式，工具会先切到手动亮度模式。\n"
+                        + "- 首次调用时，系统可能要求用户授予“修改系统设置”权限。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
                 () -> adjustScreenBrightness(-DEVICE_CONTROL_STEP_PERCENT)
         );
@@ -987,33 +993,109 @@ public class MainActivity extends AppCompatActivity {
 
     @NonNull
     private String applyScreenBrightness(int deltaPercent) {
-        WindowManager.LayoutParams attributes = getWindow().getAttributes();
-        float currentBrightness = attributes.screenBrightness >= 0f
-                ? attributes.screenBrightness
-                : SCREEN_BRIGHTNESS_DEFAULT;
-        float targetBrightness = clampFloat(
-                currentBrightness + deltaPercent / 100f,
-                SCREEN_BRIGHTNESS_MIN,
-                SCREEN_BRIGHTNESS_MAX
-        );
-        if (Float.compare(targetBrightness, currentBrightness) == 0) {
-            int currentPercent = Math.round(currentBrightness * 100f);
+        ensureWriteSettingsPermission();
+        ContentResolver contentResolver = getContentResolver();
+        boolean switchedToManual = switchScreenBrightnessModeToManualIfNeeded(contentResolver);
+        int currentBrightness = readSystemBrightnessValue(contentResolver);
+        int currentPercent = toSystemBrightnessPercent(currentBrightness);
+        int targetPercent = clampInt(currentPercent + deltaPercent, 0, 100);
+        if (targetPercent == currentPercent) {
             if (deltaPercent > 0) {
-                return "当前页面亮度已经是最大值 " + currentPercent + "%，无法继续调高。";
+                return "系统屏幕亮度已经是最大值 " + currentPercent + "%，无法继续调高。";
             }
-            return "当前页面亮度已经是最小值 " + currentPercent + "%，无法继续调低。";
+            return "系统屏幕亮度已经是最小值 " + currentPercent + "%，无法继续调低。";
         }
-        attributes.screenBrightness = targetBrightness;
+        int targetBrightness = toSystemBrightnessValue(targetPercent);
+        appendLog("[MCP] [亮度] source=system current=" + currentBrightness
+                + "(" + currentPercent + "%)"
+                + " target=" + targetBrightness
+                + "(" + targetPercent + "%)"
+                + " switchedToManual=" + switchedToManual);
+        boolean updated = Settings.System.putInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS,
+                targetBrightness
+        );
+        if (!updated) {
+            throw new IllegalStateException("写入系统亮度失败");
+        }
+        syncCurrentWindowBrightness(targetBrightness);
+        return "系统屏幕亮度已" + (deltaPercent > 0 ? "调高" : "调低") + "到 " + targetPercent + "%。";
+    }
+
+    /**
+     * 亮度工具直接改系统设置；未授权时只能先把用户带到系统授权页，再让下一次工具调用真正生效。
+     */
+    private void ensureWriteSettingsPermission() {
+        if (Settings.System.canWrite(this)) {
+            return;
+        }
+        appendLog("[Permission] WRITE_SETTINGS 未授权，正在打开系统授权页");
+        Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
+        intent.setData(Uri.parse("package:" + getPackageName()));
+        startActivity(intent);
+        throw new IllegalStateException("未授予修改系统设置权限，已打开系统授权页，请授权后再试");
+    }
+
+    /**
+     * 自动亮度模式下，先切回手动模式，保证后续“读取当前值再增减”的行为稳定可预期。
+     */
+    private boolean switchScreenBrightnessModeToManualIfNeeded(@NonNull ContentResolver contentResolver) {
+        int currentMode = Settings.System.getInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+        );
+        if (currentMode != Settings.System.SCREEN_BRIGHTNESS_MODE_AUTOMATIC) {
+            return false;
+        }
+        boolean updated = Settings.System.putInt(
+                contentResolver,
+                Settings.System.SCREEN_BRIGHTNESS_MODE,
+                Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL
+        );
+        if (!updated) {
+            throw new IllegalStateException("切换到手动亮度模式失败");
+        }
+        appendLog("[MCP] [亮度] autoMode=true -> manual");
+        return true;
+    }
+
+    private int readSystemBrightnessValue(@NonNull ContentResolver contentResolver) {
+        try {
+            int value = Settings.System.getInt(contentResolver, Settings.System.SCREEN_BRIGHTNESS);
+            return clampInt(value, SCREEN_BRIGHTNESS_SYSTEM_MIN, SCREEN_BRIGHTNESS_SYSTEM_MAX);
+        } catch (Settings.SettingNotFoundException e) {
+            throw new IllegalStateException("读取系统亮度失败", e);
+        }
+    }
+
+    private int toSystemBrightnessPercent(int brightnessValue) {
+        return Math.round(
+                (brightnessValue - SCREEN_BRIGHTNESS_SYSTEM_MIN) * 100f
+                        / (SCREEN_BRIGHTNESS_SYSTEM_MAX - SCREEN_BRIGHTNESS_SYSTEM_MIN)
+        );
+    }
+
+    private int toSystemBrightnessValue(int brightnessPercent) {
+        float ratio = clampInt(brightnessPercent, 0, 100) / 100f;
+        int value = Math.round(
+                SCREEN_BRIGHTNESS_SYSTEM_MIN
+                        + (SCREEN_BRIGHTNESS_SYSTEM_MAX - SCREEN_BRIGHTNESS_SYSTEM_MIN) * ratio
+        );
+        return clampInt(value, SCREEN_BRIGHTNESS_SYSTEM_MIN, SCREEN_BRIGHTNESS_SYSTEM_MAX);
+    }
+
+    /**
+     * 系统亮度写回后，同步当前页面窗口亮度，让用户立刻看到本页变亮/变暗。
+     */
+    private void syncCurrentWindowBrightness(int brightnessValue) {
+        WindowManager.LayoutParams attributes = getWindow().getAttributes();
+        attributes.screenBrightness = brightnessValue / (float) SCREEN_BRIGHTNESS_SYSTEM_MAX;
         getWindow().setAttributes(attributes);
-        int percent = Math.round(targetBrightness * 100f);
-        return "当前页面亮度已" + (deltaPercent > 0 ? "调高" : "调低") + "到 " + percent + "%。";
     }
 
     private int clampInt(int value, int min, int max) {
-        return Math.max(min, Math.min(max, value));
-    }
-
-    private float clampFloat(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
     }
 
