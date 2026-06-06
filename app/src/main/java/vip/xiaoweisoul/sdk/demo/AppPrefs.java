@@ -19,27 +19,27 @@ final class AppPrefs {
 
     // 下面这组 DEFAULT_* 常量就是 Demo 的默认配置入口。
     private static final String KEY_OPEN_API_BASE_URL = "open_api_base_url";
-   private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.3.5:8080";
-//      private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
+  // private static final String DEFAULT_OPEN_API_BASE_URL = "http://192.168.31.108:8080";
+      private static final String DEFAULT_OPEN_API_BASE_URL = "http://api.xiaoweisoul.vip";
 
     private static final String KEY_WS_URL = "ws_url";
-   private static final String DEFAULT_WS_URL = "ws://192.168.3.5:8000/";
-//      private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
+  // private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
+      private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
 
     private static final String KEY_ACCESS_KEY_ID = "access_key_id";
-    private static final String DEFAULT_ACCESS_KEY_ID = "ak_29e3b046be6c14439284fa35"; // faen's app1 key1
+    private static final String DEFAULT_ACCESS_KEY_ID = "ak_be60d1530176d7e4b915ed9c";
 
     private static final String KEY_ACCESS_KEY_SECRET = "access_key_secret";
-    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_a701d069bdf00d95308997af5db73106f80f5d051746fe70"; // 海棠基金的周
+    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7";
 
     private static final String KEY_INTEGRATION_APP_ID = "integration_app_id";
-    private static final String DEFAULT_INTEGRATION_APP_ID = "app_ldqmmz9t";
+    private static final String DEFAULT_INTEGRATION_APP_ID = "app_remav935";
 
     private static final String KEY_END_USER_ID = "end_user_id";
-    private static final String DEFAULT_END_USER_ID = "faen_001";
+    private static final String DEFAULT_END_USER_ID = "app_demo_end_user_001";
 
     private static final String KEY_SOUL_ID = "soul_id";
-    private static final String DEFAULT_SOUL_ID = "faen_soul_1";
+    private static final String DEFAULT_SOUL_ID = "soul_demo_chinese_general_ai_assistant_v1";
 
     private static final String KEY_PROTOCOL_VERSION = "protocol_version";
     private static final String DEFAULT_PROTOCOL_VERSION = "1";
@@ -61,7 +61,6 @@ final class AppPrefs {
     private static final String KEY_DEMO_LANGUAGE = "demo_language";
     private static final String KEY_SESSION_PROMPT_ENABLED = "session_prompt_enabled";
     private static final String KEY_SESSION_PROMPT_TEXT = "session_prompt_text";
-    private static final String KEY_EMOTION_ENABLED = "emotion_enabled";
     private static final String KEY_VOICE_INPUT_MODE = "voice_input_mode";
     static final String DEMO_LANGUAGE_ZH = "zh";
     static final String DEMO_LANGUAGE_JA = "ja";
@@ -73,7 +72,6 @@ final class AppPrefs {
     private static final String DEFAULT_TTS_PLAYBACK_STRATEGY = TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
     private static final String DEFAULT_VOICE_INPUT_MODE = VOICE_INPUT_MODE_REALTIME;
     private static final boolean DEFAULT_SESSION_PROMPT_ENABLED = false;
-    private static final boolean DEFAULT_EMOTION_ENABLED = true;
     private static final String DEFAULT_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
             + "\n"
             + "【广告内容】\n"
@@ -355,23 +353,6 @@ final class AppPrefs {
      */
     static void setSessionPrompt(@NonNull Context context, @NonNull String value) {
         putString(context, KEY_SESSION_PROMPT_TEXT, normalizeDraftText(value));
-    }
-
-    /**
-     * 读取连接时是否声明支持 LLM emotion。
-     *
-     * 默认开启是为了让 Demo 首次启动就能展示服务端下发的 emotion 事件；
-     * 开关只影响下一次 connect()，不会修改当前已连接会话。
-     */
-    static boolean isEmotionEnabled(@NonNull Context context) {
-        return getPreferences(context).getBoolean(KEY_EMOTION_ENABLED, DEFAULT_EMOTION_ENABLED);
-    }
-
-    /**
-     * 保存连接时是否声明支持 LLM emotion。
-     */
-    static void setEmotionEnabled(@NonNull Context context, boolean enabled) {
-        putBoolean(context, KEY_EMOTION_ENABLED, enabled);
     }
 
     /**

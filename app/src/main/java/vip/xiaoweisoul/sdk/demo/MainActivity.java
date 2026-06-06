@@ -179,6 +179,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        LocalDebugDefaults.applyConnectionDefaultsIfMissing(this);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
         setContentView(R.layout.activity_main);
         ensureAssistantPcmPlayerConfigured(false);
@@ -516,7 +517,7 @@ public class MainActivity extends AppCompatActivity {
             renderSessionPromptControls();
         });
         emotionEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
-            AppPrefs.setEmotionEnabled(this, isChecked);
+            EmotionPrefs.setEnabled(this, isChecked);
             appendLog("[UI] LLM Emotion 下次连接=" + isChecked);
         });
         editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
@@ -679,7 +680,7 @@ public class MainActivity extends AppCompatActivity {
     private void renderSessionPromptControls() {
         String demoLanguage = AppPrefs.getDemoLanguage(this);
         boolean enabled = AppPrefs.isSessionPromptEnabled(this);
-        boolean emotionEnabled = AppPrefs.isEmotionEnabled(this);
+        boolean emotionEnabled = EmotionPrefs.isEnabled(this);
         String prompt = AppPrefs.getSessionPrompt(this);
         sessionPromptEnabledCheckBox.setText(getLocalizedText(
                 R.string.session_prompt_enabled_checkbox,
@@ -1124,7 +1125,7 @@ public class MainActivity extends AppCompatActivity {
             String sessionPrompt = AppPrefs.getSessionPrompt(this);
             boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
             boolean sessionPromptPresent = sessionPromptEnabled && !sessionPrompt.trim().isEmpty();
-            boolean emotionEnabled = AppPrefs.isEmotionEnabled(this);
+            boolean emotionEnabled = EmotionPrefs.isEnabled(this);
             DebugOpenApiSessionTokenProvider provider = new DebugOpenApiSessionTokenProvider(
                     settings.openApiBaseUrl,
                     settings.accessKeyId,
