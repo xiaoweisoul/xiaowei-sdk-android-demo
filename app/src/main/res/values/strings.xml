@@ -99,6 +99,8 @@
     <string name="session_prompt_label_ja">Session Prompt</string>
     <string name="session_prompt_enabled_checkbox">连接时携带 Session Prompt</string>
     <string name="session_prompt_enabled_checkbox_ja">接続時に Session Prompt を送る</string>
+    <string name="emotion_enabled_checkbox">启用 LLM Emotion</string>
+    <string name="emotion_enabled_checkbox_ja">LLM Emotion を有効化</string>
     <string name="session_prompt_edit_button">查看 / 编辑 Prompt</string>
     <string name="session_prompt_edit_button_ja">Prompt を表示 / 編集</string>
     <string name="session_prompt_dialog_title">Session Prompt</string>
@@ -129,5 +131,5 @@
     <string name="text_input_empty_error_ja">送信するテキストを入力してください</string>
     <string name="audio_preprocess_label">平台效果器：</string>
     <string name="audio_preprocess_placeholder">当前未绑定平台效果器</string>
-    <string name="expression_placeholder">等待 MCP 表情命令</string>
+    <string name="expression_placeholder">等待 AI Emotion</string>
 </resources>

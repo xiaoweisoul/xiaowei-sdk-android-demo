@@ -35,6 +35,7 @@ public class SettingsActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        LocalDebugDefaults.applyConnectionDefaultsIfMissing(this);
         setContentView(R.layout.activity_settings);
         bindViews();
         fillCurrentValues();
@@ -127,6 +128,7 @@ public class SettingsActivity extends AppCompatActivity {
      */
     private void restoreDefaults() {
         AppPrefs.resetConnectionSettings(this);
+        LocalDebugDefaults.applyConnectionDefaultsIfMissing(this);
         fillCurrentValues();
         showToast("已恢复默认配置");
     }

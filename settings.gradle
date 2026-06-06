@@ -11,7 +11,22 @@ pluginManagement {
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        def useLocalSdkRepo = providers.gradleProperty("useLocalSdkRepo").orElse("false").get().toBoolean()
+        def localConfig = new Properties()
+        def localConfigFile = file("local.properties")
+        if (localConfigFile.exists()) {
+            localConfigFile.withInputStream { input ->
+                localConfig.load(input)
+            }
+        }
+        // 提交默认值放在 gradle.properties；本机 Android Studio Run 可用 local.properties 覆盖。
+        def useLocalSdkRepoValue = gradle.startParameter.projectProperties.get("useLocalSdkRepo")
+        if (useLocalSdkRepoValue == null) {
+            useLocalSdkRepoValue = localConfig.getProperty("useLocalSdkRepo")
+        }
+        if (useLocalSdkRepoValue == null) {
+            useLocalSdkRepoValue = providers.gradleProperty("useLocalSdkRepo").orElse("false").get()
+        }
+        def useLocalSdkRepo = useLocalSdkRepoValue.toBoolean()
         exclusiveContent {
             forRepository {
                 if (useLocalSdkRepo) {

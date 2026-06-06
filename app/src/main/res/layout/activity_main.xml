@@ -298,6 +298,14 @@
                     android:text="@string/session_prompt_enabled_checkbox"
                     android:textColor="@color/demo_text_primary" />
 
+                <CheckBox
+                    android:id="@+id/checkbox_emotion_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:checked="true"
+                    android:text="@string/emotion_enabled_checkbox"
+                    android:textColor="@color/demo_text_primary" />
+
                 <Button
                     android:id="@+id/button_edit_session_prompt"
                     android:layout_width="match_parent"

@@ -1,8 +1,8 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.2`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.3`，并验证最小会话闭环。
 
-公开接入默认走 `mavenCentral()`。普通接入方通常只需要这一条路径；`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景。
+Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
 您还可以在这儿获得更详细的信息： http://www.xiaoweisoul.vip/docs/app-access-overview
 
@@ -12,11 +12,12 @@
 - 演示如何创建 `XiaoweiSessionClient`
 - 演示如何配置连接参数、session token 和 `End User ID`
 - 演示如何连接、发送文本、打开收音、接收事件回调
-- 演示如何理解 `onUserInputCommitted`、`onAssistantSentence`、`onAssistantPcm` 三类核心输出信号
+- 演示如何理解 `onUserInputCommitted`、`onAssistantSentence`、`onAssistantEmotion`、`onAssistantPcm` 这些核心输出信号
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
-- 演示如何注册本地工具、配置可选 `waitingMessage`、触发表情动画并观察工具调用事件
+- 演示如何注册本地工具、配置可选 `waitingMessage`，并通过 MCP 控制媒体音量和系统全局亮度
+- 演示如何在 hello 阶段启用 LLM Emotion，并在右上角播放对应表情动画
 - 演示服务端主动断链时，如何在 `[Session]` 日志里直接看到远端 `closeCode / closeReason`
 
 如果你只是想接 SDK，不一定需要直接修改这个 Demo。通常更推荐：
@@ -81,18 +82,32 @@ Demo 运行时需要你自己填写以下参数：
 4. 等待 Gradle Sync 完成
 5. 运行 `app`
 
+如果你要让 Android Studio 的 Run 按钮使用本地 SDK，请先在当前 Demo 仓库根目录的 `local.properties` 中加入：
+
+```properties
+useLocalSdkRepo=true
+```
+
+然后重新 Sync Project，再点击 Run。`local.properties` 是本机文件，不要提交；提交状态下的默认值仍然保持 `useLocalSdkRepo=false`，也就是走 Maven Central。
+
 ### 命令行
 
-在仓库根目录执行默认模式：
+默认验证 Maven Central 路径，在仓库根目录直接执行：
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-如果你是 SDK 维护者，并且已经准备好了 `local-sdk-repo/`，才需要改用：
+本地 SDK 联调时，显式指定本地 SDK 仓库：
 
 ```bash
 ./gradlew -PuseLocalSdkRepo=true :app:assembleDebug
+```
+
+如果你的本机 `local.properties` 设置了 `useLocalSdkRepo=true`，但临时想验证 Maven Central 路径，可以用命令行覆盖：
+
+```bash
+./gradlew -PuseLocalSdkRepo=false :app:assembleDebug
 ```
 
 ## 快速体验
@@ -157,9 +172,10 @@ Demo 运行时需要你自己填写以下参数：
 - `Connect / Disconnect`
 - `Realtime / Manual` 语音输入模式切换
 - `Manual` 模式下按住说话、松开发送
+- 在 Session Prompt 区域切换下一次连接是否启用 LLM Emotion
 - `Send Text`
 - 清空日志、查看会话状态和日志输出
-- 观察平台效果器状态日志、MCP 工具调用日志与表情动画反馈
+- 观察平台效果器状态日志、MCP 工具调用日志与 AI emotion 表情动画反馈
 
 主页面日志里建议重点看下面几类标签：
 
@@ -168,6 +184,7 @@ Demo 运行时需要你自己填写以下参数：
 - `[PCM下发]`：当前回复的首帧 PCM 已经到达
 - `[AI回复结束]`：服务端这轮回复已经结束，但不代表本地播放器已经播完
 - `[AI回复汇总]`：Demo 按 `responseId` 聚合后的完整文本预览
+- `[AI表情]`：服务端 LLM emotion 事件，右上角表情区域只由这类事件驱动
 - `[TtsPlayer] [本地播放开始]`：宿主本地播放链路已经启动
 - `[TtsPlayer] [本地播放收口]`：Demo 里的本地播放链路进入收口/空闲态，更接近广告切入参考时机
 - `[Session]`：直接打印 `SessionStateEvent.toString()`；如果服务端下发了 WebSocket close frame，这里会带上 `closeCode` 和 `closeReason`
@@ -184,15 +201,19 @@ Demo 运行时需要你自己填写以下参数：
 
 ### Demo 内置 MCP 工具
 
-当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 4 个最小表情工具：
+当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 4 个最小设备控制工具，不再注册表情工具：
 
-- `show_expression(name)`：支持 `happy / cry / cold`，当前未显式设置 `waitingMessage`
-- `show_dance()`：显示跳舞动画，当前未显式设置 `waitingMessage`
-- `show_monkey()`：显示猴子搞怪动画，`waitingMessage="哈哈，请稍后"`
-- `return_to_idle()`：清除当前表情，回到默认待机状态，当前未显式设置 `waitingMessage`
+- `increase_media_volume()`：把媒体音量调大约 10%
+- `decrease_media_volume()`：把媒体音量调小约 10%
+- `increase_screen_brightness()`：把系统全局屏幕亮度调高约 10%
+- `decrease_screen_brightness()`：把系统全局屏幕亮度调低约 10%
 
 需要注意：
 
+- 右上角表情区域只由 `onAssistantEmotion()` 驱动，资源位于 `app/src/main/assets/emotion/`
+- 这 4 个工具都是无参工具；音量落到系统离散音量档位，亮度每次都会读取系统当前值，再按完整范围的 10% 步长写回系统全局亮度
+- 如果设备当前处于自动亮度模式，首次亮度工具调用会先切到手动模式
+- 首次使用亮度工具时，系统可能要求授予“修改系统设置”权限；未授权时工具会返回失败并拉起授权页
 - 当工具没有设置 `waitingMessage`，或者返回的是 `null` / 空白字符串时，服务端在工具路径超过约 `700ms` 且仍无可播文本时，会回退到默认等待语 `请稍等一下，处理中~`
 - 如果某个工具上报的 `waitingMessage` 去空白后超过 `30` 个字，服务端会把这次 `tools/list` 视为非法元数据，并以 WebSocket `StatusPolicyViolation` 主动断开
 - SDK 不会在本地拦截这个长度错误；Demo 的 `[Session]` 日志会直接打印服务端回来的 `closeCode / closeReason`，便于联调排查
@@ -657,11 +678,13 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - 由业务服务端安全地下发短期 `session token`
 - SDK 再通过 `SessionTokenProvider` 使用这个 token 建连
 
-### 2. 这个 Demo 面向公开 SDK 接入，默认使用 Maven Central
+### 2. 本地 SDK 联调方式
 
-普通接入方直接使用默认模式即可。
+提交默认使用 Maven Central，`gradle.properties` 中的 `useLocalSdkRepo=false` 不要为了本地联调改成 `true` 后提交。
 
-`-PuseLocalSdkRepo=true` 仅保留给 SDK 维护 / 联调场景，不是公开接入主路径。
+如果要本地联调尚未发布或刚改完的 SDK，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`，再在 Demo 本机 `local.properties` 中设置 `useLocalSdkRepo=true`，或在命令行构建时传入 `-PuseLocalSdkRepo=true`。
+
+如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.1.3/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -685,7 +708,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.2/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.3/`
 
 ### 点击 Connect 后失败
 
