@@ -61,6 +61,7 @@ import vip.xiaoweisoul.sdk.sessioncore.UserInputCommittedEvent;
 import vip.xiaoweisoul.sdk.sessioncore.XiaoweiSessionClient;
 import vip.xiaoweisoul.sdk.sessioncore.XiaoweiSessionClients;
 
+import java.time.ZoneId;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -1126,6 +1127,7 @@ public class MainActivity extends AppCompatActivity {
             boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
             boolean sessionPromptPresent = sessionPromptEnabled && !sessionPrompt.trim().isEmpty();
             boolean emotionEnabled = EmotionPrefs.isEnabled(this);
+            String helloTimeZone = ZoneId.systemDefault().getId();
             DebugOpenApiSessionTokenProvider provider = new DebugOpenApiSessionTokenProvider(
                     settings.openApiBaseUrl,
                     settings.accessKeyId,
@@ -1141,6 +1143,7 @@ public class MainActivity extends AppCompatActivity {
                     .setProtocolVersion(parseRequiredInt(settings.protocolVersion, "protocolVersion"))
                     .setLogicalDeviceId(requireNonBlank(settings.logicalDeviceId, "logicalDeviceId"))
                     .setLogicalClientId(requireNonBlank(settings.logicalClientId, "logicalClientId"))
+                    .setTimeZone(helloTimeZone)
                     .setEmotionEnabled(emotionEnabled)
                     .setSessionTokenProvider(provider);
             if (sessionPromptPresent) {
@@ -1157,6 +1160,7 @@ public class MainActivity extends AppCompatActivity {
                     + " endUserId=" + displayValue(settings.endUserId)
                     + " soulId=" + displayValue(settings.soulId)
                     + " voiceMode=" + getEffectiveVoiceInputMode()
+                    + " helloTimeZone=" + helloTimeZone
                     + " helloSessionPromptEnabled=" + sessionPromptEnabled
                     + " helloSessionPromptPresent=" + sessionPromptPresent
                     + " helloSessionPromptLength=" + sessionPrompt.length()
