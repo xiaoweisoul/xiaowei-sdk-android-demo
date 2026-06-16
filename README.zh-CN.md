@@ -64,6 +64,7 @@ Demo 运行时需要你自己填写以下参数：
 
 此外，当前 Demo 在代码中还会通过 `hello.session_config` 额外上报两项会话级配置，这两项不在设置页中持久化维护：
 
+- `timezone`：连接时自动读取当前设备系统时区，并按 IANA 时区名上报到 hello 根节点，例如 `Asia/Shanghai`
 - `prompt`：用于给当前会话追加一段个性化角色定义提示词
 - `idle_timeout_ms`：用于覆盖当前会话的静音超时配置
 
