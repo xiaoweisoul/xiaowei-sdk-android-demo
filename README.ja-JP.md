@@ -195,8 +195,9 @@ useLocalSdkRepo=true
 
 ### Demo 内蔵 MCP ツール
 
-現在の Demo は `MainActivity.registerMcpTools()` で次の 4 つの最小デバイス制御ツールを登録しています。表情ツールは登録しません。
+現在の Demo は `MainActivity.registerMcpTools()` で次の 5 つの最小デバイス制御ツールを登録しています。表情ツールは登録しません。
 
+- `set_media_volume(percent)`: メディア音量を指定パーセントへ設定します。JSON Schema、引数解析、引数検証、独自 `waitingMessage` の例です
 - `increase_media_volume()`: メディア音量を約 10% 上げる
 - `decrease_media_volume()`: メディア音量を約 10% 下げる
 - `increase_screen_brightness()`: システム全体の画面輝度を約 10% 上げる
@@ -205,7 +206,9 @@ useLocalSdkRepo=true
 補足:
 
 - 右上の表情エリアは `onAssistantEmotion()` だけで更新され、リソースは `app/src/main/assets/emotion/` にあります
-- 4 つのツールはいずれも引数なしです。音量は端末の離散的な音量段階に丸められ、輝度は毎回システムの現在値を読み直したうえで、全体レンジの 10% ステップでシステム全体へ書き戻します
+- `set_media_volume(percent)` は引数付きツールで、`percent` は `0..100` の整数です。`invoke(argumentsJson)` でも再検証し、モデルへ提示した JSON Schema だけには依存しません
+- `set_media_volume(percent)` の独自待機文言は `正在为你调整音量` です。残り 4 つの引数なしツールは待機文言を設定せず、サーバー既定文言との比較に使えます
+- 音量は端末の離散的な音量段階に丸められ、輝度は毎回システムの現在値を読み直したうえで、全体レンジの 10% ステップでシステム全体へ書き戻します
 - 端末が自動画面輝度モードの場合、最初の輝度ツール呼び出しで手動画面輝度モードへ切り替えます
 - 輝度ツールを初めて使うときは、Android の「システム設定の変更」権限を求められることがあります。未許可の場合はツールが失敗し、権限設定画面を開きます
 - `waitingMessage` が未設定、`null`、または空白文字列だけの場合、サーバーはツール経路が約 `700ms` を超えても可聴テキストがまだ無いとき、既定待機文言 `请稍等一下，处理中~` へフォールバックします

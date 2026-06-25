@@ -43,6 +43,8 @@ import androidx.interpolator.view.animation.FastOutSlowInInterpolator;
 
 import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieDrawable;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.google.android.material.shape.CornerFamily;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -82,7 +84,6 @@ public class MainActivity extends AppCompatActivity {
     private static final String LOGCAT_TAG = "XWSDKDemo";
     private static final int REQUEST_CODE_RECORD_AUDIO_PERMISSION = 1001;
     private static final boolean ENABLE_ASSISTANT_PCM_PLAYBACK = true;
-    private static final String EMPTY_TOOL_INPUT_SCHEMA_JSON = "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}";
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
@@ -782,6 +783,56 @@ public class MainActivity extends AppCompatActivity {
      * 注册 Demo 当前可供服务端调用的最小 MCP 工具集合。
      */
     private void registerMcpTools() {
+        sessionClient.registerTool(new SessionTool() {
+            @NonNull
+            @Override
+            public String getName() {
+                return "set_media_volume";
+            }
+
+            @NonNull
+            @Override
+            public String getDescription() {
+                return "## 工具作用\n"
+                        + "把当前设备的媒体音量设置到用户指定的百分比。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求把音量设置到某个百分比时，必须调用本工具。\n"
+                        + "- 参数 percent 必须是 0 到 100 的整数。\n\n"
+                        + "## 边界\n"
+                        + "- 只控制 Android STREAM_MUSIC，不控制通话、闹钟或通知音量。";
+            }
+
+            @NonNull
+            @Override
+            public String getInputSchemaJson() {
+                return """
+                        {
+                          "type": "object",
+                          "properties": {
+                            "percent": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 100,
+                              "description": "目标媒体音量百分比"
+                            }
+                          },
+                          "required": ["percent"],
+                          "additionalProperties": false
+                        }
+                        """;
+            }
+
+            @NonNull
+            @Override
+            public String getWaitingMessage() {
+                return "正在为你调整音量";
+            }
+
+            @Override
+            public String invoke(@NonNull String argumentsJson) {
+                return setMediaVolume(argumentsJson);
+            }
+        });
         registerDeviceControlTool(
                 "increase_media_volume",
                 "## 工具作用\n"
@@ -920,7 +971,13 @@ public class MainActivity extends AppCompatActivity {
             @NonNull
             @Override
             public String getInputSchemaJson() {
-                return EMPTY_TOOL_INPUT_SCHEMA_JSON;
+                return """
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": false
+                        }
+                        """;
             }
 
             @Override
@@ -953,6 +1010,53 @@ public class MainActivity extends AppCompatActivity {
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI);
         int percent = Math.round(targetVolume * 100f / maxVolume);
         return "媒体音量已" + (deltaPercent > 0 ? "调高" : "调低") + "到 " + percent + "%。";
+    }
+
+    /**
+     * 带参数 MCP 示例必须再次校验服务端传入值，不能只依赖上报给模型的 JSON Schema。
+     */
+    @NonNull
+    private String setMediaVolume(@NonNull String argumentsJson) {
+        JsonObject arguments;
+        try {
+            arguments = JsonParser.parseString(argumentsJson).getAsJsonObject();
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("工具参数必须是 JSON object", e);
+        }
+        if (!arguments.has("percent") || arguments.get("percent").isJsonNull()) {
+            throw new IllegalArgumentException("缺少必填参数 percent");
+        }
+        if (arguments.size() != 1) {
+            throw new IllegalArgumentException("只支持参数 percent");
+        }
+
+        int targetPercent;
+        try {
+            if (!arguments.get("percent").isJsonPrimitive()
+                    || !arguments.getAsJsonPrimitive("percent").isNumber()) {
+                throw new IllegalArgumentException("参数 percent 必须是数字");
+            }
+            targetPercent = arguments.getAsJsonPrimitive("percent").getAsBigDecimal().intValueExact();
+        } catch (RuntimeException e) {
+            throw new IllegalArgumentException("参数 percent 必须是 0 到 100 的整数", e);
+        }
+        if (targetPercent < 0 || targetPercent > 100) {
+            throw new IllegalArgumentException("参数 percent 必须在 0 到 100 之间");
+        }
+
+        AudioManager audioManager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        if (audioManager == null) {
+            throw new IllegalStateException("AudioManager unavailable");
+        }
+        int maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
+        if (maxVolume <= 0) {
+            throw new IllegalStateException("media volume is not adjustable");
+        }
+        int targetVolume = Math.round(maxVolume * targetPercent / 100f);
+        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetVolume, AudioManager.FLAG_SHOW_UI);
+        int appliedPercent = Math.round(targetVolume * 100f / maxVolume);
+        appendLog("[MCP] [音量] requested=" + targetPercent + "% applied=" + appliedPercent + "%");
+        return "媒体音量已设置到 " + appliedPercent + "%。";
     }
 
     @NonNull

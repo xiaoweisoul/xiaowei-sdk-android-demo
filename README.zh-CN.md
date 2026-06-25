@@ -202,8 +202,9 @@ useLocalSdkRepo=true
 
 ### Demo 内置 MCP 工具
 
-当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 4 个最小设备控制工具，不再注册表情工具：
+当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 5 个最小设备控制工具，不再注册表情工具：
 
+- `set_media_volume(percent)`：把媒体音量设置到指定百分比；演示 JSON Schema、参数解析、参数校验与自定义 `waitingMessage`
 - `increase_media_volume()`：把媒体音量调大约 10%
 - `decrease_media_volume()`：把媒体音量调小约 10%
 - `increase_screen_brightness()`：把系统全局屏幕亮度调高约 10%
@@ -212,7 +213,9 @@ useLocalSdkRepo=true
 需要注意：
 
 - 右上角表情区域只由 `onAssistantEmotion()` 驱动，资源位于 `app/src/main/assets/emotion/`
-- 这 4 个工具都是无参工具；音量落到系统离散音量档位，亮度每次都会读取系统当前值，再按完整范围的 10% 步长写回系统全局亮度
+- `set_media_volume(percent)` 是带参数工具，`percent` 必须是 `0..100` 的整数；`invoke(argumentsJson)` 仍会再次校验参数，不能只依赖上报给模型的 JSON Schema
+- `set_media_volume(percent)` 自定义等待语为 `正在为你调整音量`；其余 4 个无参工具不设置等待语，用于对照观察服务端默认等待语
+- 音量最终会落到系统离散音量档位；亮度每次都会读取系统当前值，再按完整范围的 10% 步长写回系统全局亮度
 - 如果设备当前处于自动亮度模式，首次亮度工具调用会先切到手动模式
 - 首次使用亮度工具时，系统可能要求授予“修改系统设置”权限；未授权时工具会返回失败并拉起授权页
 - 当工具没有设置 `waitingMessage`，或者返回的是 `null` / 空白字符串时，服务端在工具路径超过约 `700ms` 且仍无可播文本时，会回退到默认等待语 `请稍等一下，处理中~`
