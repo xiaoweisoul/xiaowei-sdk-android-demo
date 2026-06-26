@@ -62,13 +62,13 @@ Demo 运行时需要你自己填写以下参数：
 
 这些值不会在仓库中提供你的正式业务默认值。请根据自己的测试环境或业务环境填写。
 
-此外，当前 Demo 在代码中还会通过 `hello.session_config` 额外上报两项会话级配置，这两项不在设置页中持久化维护：
+此外，当前 Demo 连接时还会额外上报以下配置，这些配置不在设置页中持久化维护：
 
 - `timezone`：连接时自动读取当前设备系统时区，并按 IANA 时区名上报到 hello 根节点，例如 `Asia/Shanghai`
-- `prompt`：用于给当前会话追加一段个性化角色定义提示词
-- `idle_timeout_ms`：用于覆盖当前会话的静音超时配置
+- `session_config.prompt`：用于给当前会话追加一段个性化角色定义提示词
+- `session_config.idle_timeout_ms`：用于覆盖当前会话的静音超时配置
 
-这两项默认值定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` 中的：
+其中 `prompt` 和 `idle_timeout_ms` 的默认值定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` 中的：
 
 - `DEMO_HELLO_SESSION_PROMPT`
 - `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS`

@@ -69,6 +69,17 @@ Demo の実行には、次のパラメータが必要です。
 
 これらの値の正式な業務設定は、このリポジトリには含まれていません。利用時は、自分のテスト環境または業務環境の設定値を使用してください。
 
+また、現在の Demo は接続時に次の設定も上報します。これらは設定画面には保存されません。
+
+- `timezone`: 接続時に端末の現在のシステムタイムゾーンを読み取り、`Asia/Shanghai` のような IANA タイムゾーン名として hello ルートへ上報します
+- `session_config.prompt`: 現在の session に個別の役割プロンプトを追加します
+- `session_config.idle_timeout_ms`: 現在の session の無音タイムアウト設定を上書きします
+
+`prompt` と `idle_timeout_ms` の既定値は、`app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` の次の定数で定義されています。
+
+- `DEMO_HELLO_SESSION_PROMPT`
+- `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS`
+
 ## 実行方法
 
 ### Android Studio
