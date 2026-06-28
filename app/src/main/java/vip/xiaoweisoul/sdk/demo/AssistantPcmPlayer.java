@@ -15,6 +15,7 @@ import androidx.annotation.Nullable;
 
 import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
 
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -65,14 +66,19 @@ final class AssistantPcmPlayer {
     private static final int START_FADE_IN_MS = 8;
 
     /**
-     * 单帧理论时长 60ms 左右；若本地播放线程在队列仍有积压时停顿超过 90ms，就值得重点排查。
+     * 首播先攒 3 帧再发车，先用最小逻辑提高起播稳定性。
      */
-    private static final long LOCAL_PLAYBACK_GAP_WARN_MS = 90L;
+    private static final int START_BUFFER_FRAMES = 3;
 
     /**
-     * AudioTrack.write 是阻塞调用；若明显超过一帧时长太多，通常意味着本地播放侧有额外卡顿。
+     * 单帧理论时长 60ms 左右；逐条抖动日志提高到接近 3 帧断供时再打印，避免把可接受的小抖动也刷出来。
      */
-    private static final long LOCAL_WRITE_BLOCK_EXTRA_WARN_MS = 30L;
+    private static final long LOCAL_PLAYBACK_GAP_WARN_MS = 180L;
+
+    /**
+     * AudioTrack.write 是阻塞调用；这里和上面的 180ms 口径对齐，只有明显超过 3 帧量级才逐条告警。
+     */
+    private static final long LOCAL_WRITE_BLOCK_EXTRA_WARN_MS = 120L;
 
     interface Logger {
         /**
@@ -200,6 +206,17 @@ final class AssistantPcmPlayer {
     }
 
     /**
+     * 告诉播放器：这一轮回复已经服务端收口。
+     * 这样短句即使不足 3 帧，也不会一直等首播门槛。
+     */
+    void markResponseStop(@Nullable Long turnId, @Nullable String responseId, @Nullable String reason) {
+        if (released.get()) {
+            return;
+        }
+        queue.offerLast(PlaybackItem.responseStop(turnId, responseId));
+    }
+
+    /**
      * 在本地发送 interrupt=true 前，先停掉当前播放，并持续屏蔽旧 response 的尾包。
      */
     void interruptAndSuppressCurrentResponse() {
@@ -279,6 +296,8 @@ final class AssistantPcmPlayer {
      * 后台播放线程主循环：消费 PCM、处理停止命令，并在空闲时把播放链路收口干净。
      */
     private void runLoop() {
+        ArrayDeque<PlaybackItem> startBuffer = new ArrayDeque<>();
+        PlaybackGateState gateState = new PlaybackGateState();
         try {
             while (true) {
                 PlaybackWaitState waitState = snapshotPlaybackWaitState();
@@ -295,7 +314,34 @@ final class AssistantPcmPlayer {
                     break;
                 }
                 if (item.type == PlaybackItem.TYPE_FLUSH_STOP) {
+                    startBuffer.clear();
+                    gateState.reset();
                     enterIdleState("收到停止命令");
+                    continue;
+                }
+                if (item.type == PlaybackItem.TYPE_RESPONSE_STOP) {
+                    gateState.onResponseStop(item.turnId, item.responseId);
+                    if (!gateState.started && gateState.canStart(startBuffer.size())) {
+                        while (!startBuffer.isEmpty()) {
+                            playFrame(startBuffer.removeFirst());
+                        }
+                        gateState.started = true;
+                    }
+                    continue;
+                }
+                if (!gateState.matches(item.turnId, item.responseId)) {
+                    startBuffer.clear();
+                    gateState.reset();
+                    gateState.bind(item.turnId, item.responseId);
+                }
+                if (!gateState.started) {
+                    startBuffer.addLast(item);
+                    if (gateState.canStart(startBuffer.size())) {
+                        while (!startBuffer.isEmpty()) {
+                            playFrame(startBuffer.removeFirst());
+                        }
+                        gateState.started = true;
+                    }
                     continue;
                 }
                 String queueWaitLog = recordQueueWait(item, waitState, pollWaitMs);
@@ -935,6 +981,56 @@ final class AssistantPcmPlayer {
         }
     }
 
+    /**
+     * 首播门槛状态只在播放线程内部使用，避免多线程同步复杂化。
+     */
+    private static final class PlaybackGateState {
+        @Nullable
+        private Long turnId;
+        @Nullable
+        private String responseId;
+        private boolean started;
+        private boolean responseStopped;
+
+        private void bind(@Nullable Long turnId, @Nullable String responseId) {
+            this.turnId = turnId;
+            this.responseId = normalizeResponseId(responseId);
+            this.started = false;
+            this.responseStopped = false;
+        }
+
+        private boolean matches(@Nullable Long turnId, @Nullable String responseId) {
+            return Objects.equals(this.turnId, turnId)
+                    && Objects.equals(this.responseId, normalizeResponseId(responseId));
+        }
+
+        private void onResponseStop(@Nullable Long turnId, @Nullable String responseId) {
+            if (this.turnId == null && this.responseId == null) {
+                bind(turnId, responseId);
+                responseStopped = true;
+                return;
+            }
+            if (!matches(turnId, responseId)) {
+                return;
+            }
+            responseStopped = true;
+        }
+
+        private boolean canStart(int bufferedFrames) {
+            if (bufferedFrames <= 0) {
+                return false;
+            }
+            return bufferedFrames >= START_BUFFER_FRAMES || responseStopped;
+        }
+
+        private void reset() {
+            turnId = null;
+            responseId = null;
+            started = false;
+            responseStopped = false;
+        }
+    }
+
     @NonNull
     private static String displayValue(@Nullable String value) {
         if (value == null || value.trim().isEmpty()) {
@@ -955,6 +1051,7 @@ final class AssistantPcmPlayer {
         private static final int TYPE_PLAY = 1;
         private static final int TYPE_FLUSH_STOP = 2;
         private static final int TYPE_RELEASE = 3;
+        private static final int TYPE_RESPONSE_STOP = 4;
 
         private final int type;
         private final int sampleRateHz;
@@ -1005,6 +1102,11 @@ final class AssistantPcmPlayer {
         @NonNull
         private static PlaybackItem release() {
             return new PlaybackItem(TYPE_RELEASE, 0, 0, 0L, null, null, null);
+        }
+
+        @NonNull
+        private static PlaybackItem responseStop(@Nullable Long turnId, @Nullable String responseId) {
+            return new PlaybackItem(TYPE_RESPONSE_STOP, 0, 0, 0L, turnId, responseId, null);
         }
     }
 }

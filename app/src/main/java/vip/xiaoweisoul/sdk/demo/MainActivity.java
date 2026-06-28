@@ -87,8 +87,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE_RECORD_AUDIO_PERMISSION = 1001;
     private static final boolean ENABLE_ASSISTANT_PCM_PLAYBACK = true;
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
-    // 60ms 一帧时，超过 90ms 还没收到下一帧，基本就说明下发链路发生了肉眼可感知的抖动。
-    private static final long ASSISTANT_PCM_GAP_WARN_MS = 90L;
+    // 60ms 一帧时，只有连续断供接近 3 帧才按逐条抖动日志打印，避免把可接受的小抖动也当成问题刷屏。
+    private static final long ASSISTANT_PCM_GAP_WARN_MS = 180L;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
     private static final int SCREEN_BRIGHTNESS_SYSTEM_MIN = 0;
@@ -408,6 +408,11 @@ public class MainActivity extends AppCompatActivity {
                     if (player != null) {
                         player.interruptAndSuppressResponseFromServer(event.getResponseId(), event.getStopReason());
                     }
+                } else {
+                    AssistantPcmPlayer player = assistantPcmPlayer;
+                    if (player != null) {
+                        player.markResponseStop(event.getTurnId(), event.getResponseId(), event.getStopReason());
+                    }
                 }
                 assistantSpeaking = false;
                 appendLog("[AI回复结束]"
@@ -458,7 +463,7 @@ public class MainActivity extends AppCompatActivity {
             public void onAssistantPcm(PcmFrame frame) {
                 String pcmGapLog = assistantPcmGapTracker.observe(frame);
                 if (pcmGapLog != null) {
-                    appendLog(pcmGapLog);
+                    Log.i(LOGCAT_TAG, pcmGapLog);
                 }
                 AssistantResponseTracker.PcmObservation observation = assistantResponseTracker.observePcm(frame);
                 if (observation.isFirstFrame()) {
@@ -1934,7 +1939,13 @@ public class MainActivity extends AppCompatActivity {
         }
         assistantPcmPlayer = new AssistantPcmPlayer(
                 this,
-                line -> appendLog(line, true),
+                line -> {
+                    // 播放抖动日志只保留在 logcat，避免首页运行日志被高频刷屏。
+                    if (line.contains("[本地播放抖动]")) {
+                        return;
+                    }
+                    appendLog(line, true);
+                },
                 strategyPreference,
                 AppPrefs.describeTtsPlaybackStrategy(strategyPreference)
         );
