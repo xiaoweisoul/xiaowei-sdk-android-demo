@@ -9,6 +9,7 @@ import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -34,6 +35,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -85,6 +87,8 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE_RECORD_AUDIO_PERMISSION = 1001;
     private static final boolean ENABLE_ASSISTANT_PCM_PLAYBACK = true;
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
+    // 60ms 一帧时，超过 90ms 还没收到下一帧，基本就说明下发链路发生了肉眼可感知的抖动。
+    private static final long ASSISTANT_PCM_GAP_WARN_MS = 90L;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
     private static final int SCREEN_BRIGHTNESS_SYSTEM_MIN = 0;
@@ -112,6 +116,8 @@ public class MainActivity extends AppCompatActivity {
     private final XiaoweiSessionClient sessionClient = XiaoweiSessionClients.create();
     // Demo 额外聚合多句 AI 文本，便于公开示例里展示一轮 response 的完整收口。
     private final AssistantResponseTracker assistantResponseTracker = new AssistantResponseTracker();
+    // 额外统计 PCM 到达间隔，帮助区分“服务端没发下来”还是“本地播放器没播出来”。
+    private final AssistantPcmGapTracker assistantPcmGapTracker = new AssistantPcmGapTracker(ASSISTANT_PCM_GAP_WARN_MS);
 
     // Demo 宿主负责正式的下行 PCM 播放链路，SDK 只负责回调统一 PcmFrame。
     private AssistantPcmPlayer assistantPcmPlayer;
@@ -417,6 +423,10 @@ public class MainActivity extends AppCompatActivity {
                             + " sentenceCount=" + summary.getSentenceCount()
                             + " text=" + summary.getTextPreview());
                 }
+                String pcmSummaryLog = assistantPcmGapTracker.finishResponse(event.getTurnId(), event.getResponseId(), event.getStopReason());
+                if (pcmSummaryLog != null) {
+                    appendLog(pcmSummaryLog);
+                }
             }
 
             @Override
@@ -446,6 +456,10 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public void onAssistantPcm(PcmFrame frame) {
+                String pcmGapLog = assistantPcmGapTracker.observe(frame);
+                if (pcmGapLog != null) {
+                    appendLog(pcmGapLog);
+                }
                 AssistantResponseTracker.PcmObservation observation = assistantResponseTracker.observePcm(frame);
                 if (observation.isFirstFrame()) {
                     appendLog("[PCM下发]"
@@ -1894,6 +1908,7 @@ public class MainActivity extends AppCompatActivity {
      */
     private void stopAssistantPlayback() {
         assistantResponseTracker.reset();
+        assistantPcmGapTracker.reset();
         AssistantPcmPlayer player = assistantPcmPlayer;
         if (player != null) {
             player.flushStopAndResetResponseState();
@@ -2043,6 +2058,120 @@ public class MainActivity extends AppCompatActivity {
     @NonNull
     private static String displayValue(Number value) {
         return value == null ? "-" : String.valueOf(value);
+    }
+
+    /**
+     * 统计同一轮回复内 PCM 到达间隔。
+     * 这里不改任何播放行为，只补观测，便于判断“句内发颤”是不是收包层先出现了断档。
+     */
+    private static final class AssistantPcmGapTracker {
+        private final long warnGapMs;
+        @Nullable
+        private Long currentTurnId;
+        @Nullable
+        private String currentResponseId;
+        private long frameCount;
+        private long lastSeq;
+        private long lastFrameAtMs;
+        private int gapWarnCount;
+        private long maxGapMs;
+
+        private AssistantPcmGapTracker(long warnGapMs) {
+            this.warnGapMs = warnGapMs;
+        }
+
+        @Nullable
+        private synchronized String observe(@NonNull PcmFrame frame) {
+            long nowMs = SystemClock.elapsedRealtime();
+            Long turnId = frame.getTurnId();
+            String responseId = normalizeResponseId(frame.getResponseId());
+            if (!isSameResponse(turnId, responseId)) {
+                startResponse(turnId, responseId, frame.getSeq(), nowMs);
+                return null;
+            }
+
+            long gapMs = lastFrameAtMs <= 0L ? 0L : nowMs - lastFrameAtMs;
+            long previousSeq = lastSeq;
+            lastFrameAtMs = nowMs;
+            lastSeq = frame.getSeq();
+            frameCount += 1L;
+            if (gapMs <= warnGapMs) {
+                return null;
+            }
+            gapWarnCount += 1;
+            maxGapMs = Math.max(maxGapMs, gapMs);
+            return "[PCM下发抖动]"
+                    + " turnId=" + displayValue(turnId)
+                    + " responseId=" + displayValue(responseId)
+                    + " seq=" + frame.getSeq()
+                    + " prevSeq=" + previousSeq
+                    + " gapMs=" + gapMs
+                    + " expectedFrameMs=" + estimateFrameDurationMs(frame);
+        }
+
+        @Nullable
+        private synchronized String finishResponse(@Nullable Long turnId, @Nullable String responseId, @Nullable String stopReason) {
+            String normalizedResponseId = normalizeResponseId(responseId);
+            if (!isSameResponse(turnId, normalizedResponseId) || frameCount <= 0L) {
+                return null;
+            }
+            String summary = "[PCM下发统计]"
+                    + " turnId=" + displayValue(currentTurnId)
+                    + " responseId=" + displayValue(currentResponseId)
+                    + " frames=" + frameCount
+                    + " gapWarnCount=" + gapWarnCount
+                    + " maxGapMs=" + maxGapMs
+                    + " lastSeq=" + lastSeq
+                    + " stopReason=" + displayValue(stopReason);
+            clear();
+            return summary;
+        }
+
+        private synchronized void reset() {
+            clear();
+        }
+
+        private void startResponse(@Nullable Long turnId, @Nullable String responseId, long seq, long frameAtMs) {
+            currentTurnId = turnId;
+            currentResponseId = responseId;
+            frameCount = 1L;
+            lastSeq = seq;
+            lastFrameAtMs = frameAtMs;
+            gapWarnCount = 0;
+            maxGapMs = 0L;
+        }
+
+        private boolean isSameResponse(@Nullable Long turnId, @Nullable String responseId) {
+            boolean sameTurn = currentTurnId == null ? turnId == null : currentTurnId.equals(turnId);
+            return sameTurn && TextUtils.equals(currentResponseId, responseId);
+        }
+
+        private void clear() {
+            currentTurnId = null;
+            currentResponseId = null;
+            frameCount = 0L;
+            lastSeq = 0L;
+            lastFrameAtMs = 0L;
+            gapWarnCount = 0;
+            maxGapMs = 0L;
+        }
+
+        @Nullable
+        private static String normalizeResponseId(@Nullable String value) {
+            if (value == null) {
+                return null;
+            }
+            String trimmed = value.trim();
+            return trimmed.isEmpty() ? null : trimmed;
+        }
+
+        private static long estimateFrameDurationMs(@NonNull PcmFrame frame) {
+            int sampleRateHz = frame.getSampleRateHz();
+            if (sampleRateHz <= 0) {
+                return 0L;
+            }
+            return Math.max(1L, Math.round(frame.getSamplesPerChannel() * 1000.0d / sampleRateHz));
+        }
     }
 
     /**
