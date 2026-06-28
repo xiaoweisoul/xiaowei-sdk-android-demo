@@ -7,7 +7,6 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioTrack;
 import android.os.Build;
-import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -70,16 +69,6 @@ final class AssistantPcmPlayer {
      */
     private static final int START_BUFFER_FRAMES = 3;
 
-    /**
-     * 单帧理论时长 60ms 左右；逐条抖动日志提高到接近 3 帧断供时再打印，避免把可接受的小抖动也刷出来。
-     */
-    private static final long LOCAL_PLAYBACK_GAP_WARN_MS = 180L;
-
-    /**
-     * AudioTrack.write 是阻塞调用；这里和上面的 180ms 口径对齐，只有明显超过 3 帧量级才逐条告警。
-     */
-    private static final long LOCAL_WRITE_BLOCK_EXTRA_WARN_MS = 120L;
-
     interface Logger {
         /**
          * 输出一条播放器调试日志。
@@ -123,15 +112,6 @@ final class AssistantPcmPlayer {
     @Nullable
     private String currentPlaybackResponseId;
     private boolean localPlaybackActive;
-    @Nullable
-    private Long lastWriteEndAtMs;
-    private long playbackFrameCount;
-    private int playbackGapWarnCount;
-    private long playbackMaxGapMs;
-    private int queueWaitWarnCount;
-    private long queueWaitMaxMs;
-    private int writeBlockWarnCount;
-    private long writeBlockMaxMs;
 
     /**
      * 创建一个独立播放器线程，专门消费 SDK 回调的 assistant PCM。
@@ -300,10 +280,7 @@ final class AssistantPcmPlayer {
         PlaybackGateState gateState = new PlaybackGateState();
         try {
             while (true) {
-                PlaybackWaitState waitState = snapshotPlaybackWaitState();
-                long pollStartAtMs = SystemClock.elapsedRealtime();
                 PlaybackItem item = queue.pollFirst(IDLE_STOP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                long pollWaitMs = SystemClock.elapsedRealtime() - pollStartAtMs;
                 if (item == null) {
                     if (hasTrack()) {
                         enterIdleState("等待新 PCM 超时 " + IDLE_STOP_TIMEOUT_MS + "ms");
@@ -344,10 +321,6 @@ final class AssistantPcmPlayer {
                     }
                     continue;
                 }
-                String queueWaitLog = recordQueueWait(item, waitState, pollWaitMs);
-                if (queueWaitLog != null) {
-                    logLine(queueWaitLog);
-                }
                 playFrame(item);
             }
         } catch (InterruptedException e) {
@@ -384,24 +357,12 @@ final class AssistantPcmPlayer {
             if (data == null || data.length == 0) {
                 return;
             }
-            int pendingQueueDepth = queue.size();
-            long frameDurationMs = estimateFrameDurationMs(data.length, item.sampleRateHz, item.channels);
-            long writeStartAtMs = SystemClock.elapsedRealtime();
-            String playbackGapLog = maybeBuildPlaybackGapLog(item, writeStartAtMs, frameDurationMs, pendingQueueDepth);
-            if (playbackGapLog != null) {
-                logLine(playbackGapLog);
-            }
             int written = track.write(data, 0, data.length, AudioTrack.WRITE_BLOCKING);
-            long writeCostMs = SystemClock.elapsedRealtime() - writeStartAtMs;
             if (written < 0) {
                 throw new IllegalStateException("AudioTrack.write failed: " + written);
             }
             if (written != data.length) {
                 logLine("[TtsPlayer] PCM 写入不完整，seq=" + item.seq + " bytes=" + written + "/" + data.length);
-            }
-            String writeBlockLog = recordWriteResult(item, writeStartAtMs + writeCostMs, frameDurationMs, pendingQueueDepth, writeCostMs);
-            if (writeBlockLog != null) {
-                logLine(writeBlockLog);
             }
         } catch (Exception e) {
             logLine("[TtsPlayer] 播放失败: " + e.getMessage());
@@ -536,12 +497,10 @@ final class AssistantPcmPlayer {
      */
     private void enterIdleState(@NonNull String reason) {
         String idleLog = null;
-        String playbackStatsLog = null;
         synchronized (audioLock) {
             boolean shouldLog = !idleStateEntered;
             if (shouldLog) {
                 idleLog = buildPlaybackIdleLogLocked(reason);
-                playbackStatsLog = buildPlaybackStatsLogLocked();
             }
             muteAudioTrackLocked(null);
             releaseAudioTrackLocked("进入静默态，丢弃可能已 underrun 的旧 AudioTrack");
@@ -550,9 +509,6 @@ final class AssistantPcmPlayer {
         }
         if (idleLog != null) {
             logLine(idleLog);
-        }
-        if (playbackStatsLog != null) {
-            logLine(playbackStatsLog);
         }
     }
 
@@ -819,7 +775,6 @@ final class AssistantPcmPlayer {
 
     @Nullable
     private String announcePlaybackStartIfNeeded(@NonNull PlaybackItem item) {
-        String previousStatsLog = null;
         synchronized (audioLock) {
             String normalizedResponseId = normalizeResponseId(item.responseId);
             if (localPlaybackActive
@@ -827,21 +782,13 @@ final class AssistantPcmPlayer {
                     && Objects.equals(currentPlaybackTurnId, item.turnId)) {
                 return null;
             }
-            if (localPlaybackActive) {
-                previousStatsLog = buildPlaybackStatsLogLocked();
-                resetPlaybackMetricsLocked();
-            }
             localPlaybackActive = true;
             currentPlaybackTurnId = item.turnId;
             currentPlaybackResponseId = normalizedResponseId;
-            String startLog = "[TtsPlayer] [本地播放开始]"
+            return "[TtsPlayer] [本地播放开始]"
                     + " turnId=" + displayValue(item.turnId)
                     + " responseId=" + displayValue(normalizedResponseId)
                     + " seq=" + item.seq;
-            if (previousStatsLog != null) {
-                logLine(previousStatsLog);
-            }
-            return startLog;
         }
     }
 
@@ -858,127 +805,6 @@ final class AssistantPcmPlayer {
         currentPlaybackTurnId = null;
         currentPlaybackResponseId = null;
         localPlaybackActive = false;
-        resetPlaybackMetricsLocked();
-    }
-
-    private void resetPlaybackMetricsLocked() {
-        lastWriteEndAtMs = null;
-        playbackFrameCount = 0L;
-        playbackGapWarnCount = 0;
-        playbackMaxGapMs = 0L;
-        queueWaitWarnCount = 0;
-        queueWaitMaxMs = 0L;
-        writeBlockWarnCount = 0;
-        writeBlockMaxMs = 0L;
-    }
-
-    @Nullable
-    private String maybeBuildPlaybackGapLog(@NonNull PlaybackItem item, long writeStartAtMs, long frameDurationMs, int pendingQueueDepth) {
-        if (pendingQueueDepth <= 0 || lastWriteEndAtMs == null) {
-            return null;
-        }
-        if (!Objects.equals(currentPlaybackTurnId, item.turnId)
-                || !Objects.equals(currentPlaybackResponseId, normalizeResponseId(item.responseId))) {
-            return null;
-        }
-        long gapMs = writeStartAtMs - lastWriteEndAtMs;
-        if (gapMs <= LOCAL_PLAYBACK_GAP_WARN_MS) {
-            return null;
-        }
-        playbackGapWarnCount += 1;
-        playbackMaxGapMs = Math.max(playbackMaxGapMs, gapMs);
-        return "[TtsPlayer] [本地播放抖动]"
-                + " type=write_start_gap"
-                + " turnId=" + displayValue(item.turnId)
-                + " responseId=" + displayValue(normalizeResponseId(item.responseId))
-                + " seq=" + item.seq
-                + " gapMs=" + gapMs
-                + " expectedFrameMs=" + frameDurationMs
-                + " queueDepth=" + pendingQueueDepth;
-    }
-
-    @Nullable
-    private String recordWriteResult(@NonNull PlaybackItem item, long writeEndAtMs, long frameDurationMs, int pendingQueueDepth, long writeCostMs) {
-        playbackFrameCount += 1L;
-        lastWriteEndAtMs = writeEndAtMs;
-        if (pendingQueueDepth <= 0 || writeCostMs <= frameDurationMs + LOCAL_WRITE_BLOCK_EXTRA_WARN_MS) {
-            return null;
-        }
-        writeBlockWarnCount += 1;
-        writeBlockMaxMs = Math.max(writeBlockMaxMs, writeCostMs);
-        return "[TtsPlayer] [本地播放抖动]"
-                + " type=write_block"
-                + " turnId=" + displayValue(item.turnId)
-                + " responseId=" + displayValue(normalizeResponseId(item.responseId))
-                + " seq=" + item.seq
-                + " costMs=" + writeCostMs
-                + " expectedFrameMs=" + frameDurationMs
-                + " queueDepth=" + pendingQueueDepth;
-    }
-
-    @Nullable
-    private String buildPlaybackStatsLogLocked() {
-        if (!localPlaybackActive && playbackFrameCount <= 0L) {
-            return null;
-        }
-        return "[TtsPlayer] [本地播放统计]"
-                + " turnId=" + displayValue(currentPlaybackTurnId)
-                + " responseId=" + displayValue(currentPlaybackResponseId)
-                + " frames=" + playbackFrameCount
-                + " gapWarnCount=" + playbackGapWarnCount
-                + " maxGapMs=" + playbackMaxGapMs
-                + " queueWaitWarnCount=" + queueWaitWarnCount
-                + " maxQueueWaitMs=" + queueWaitMaxMs
-                + " writeBlockWarnCount=" + writeBlockWarnCount
-                + " maxWriteBlockMs=" + writeBlockMaxMs;
-    }
-
-    @Nullable
-    private String recordQueueWait(@NonNull PlaybackItem item, @NonNull PlaybackWaitState waitState, long pollWaitMs) {
-        if (!waitState.hasTrack || !waitState.playbackActive || pollWaitMs <= LOCAL_PLAYBACK_GAP_WARN_MS) {
-            return null;
-        }
-        synchronized (audioLock) {
-            queueWaitWarnCount += 1;
-            queueWaitMaxMs = Math.max(queueWaitMaxMs, pollWaitMs);
-        }
-        return "[TtsPlayer] [本地播放抖动]"
-                + " type=queue_wait"
-                + " turnId=" + displayValue(waitState.turnId)
-                + " responseId=" + displayValue(waitState.responseId)
-                + " nextSeq=" + item.seq
-                + " gapMs=" + pollWaitMs;
-    }
-
-    @NonNull
-    private PlaybackWaitState snapshotPlaybackWaitState() {
-        synchronized (audioLock) {
-            return new PlaybackWaitState(audioTrack != null, localPlaybackActive, currentPlaybackTurnId, currentPlaybackResponseId);
-        }
-    }
-
-    private static long estimateFrameDurationMs(int dataLength, int sampleRateHz, int channels) {
-        if (sampleRateHz <= 0 || channels <= 0 || dataLength <= 0) {
-            return 0L;
-        }
-        double samplesPerChannel = dataLength / (double) (channels * 2);
-        return Math.max(1L, Math.round(samplesPerChannel * 1000.0d / sampleRateHz));
-    }
-
-    private static final class PlaybackWaitState {
-        private final boolean hasTrack;
-        private final boolean playbackActive;
-        @Nullable
-        private final Long turnId;
-        @Nullable
-        private final String responseId;
-
-        private PlaybackWaitState(boolean hasTrack, boolean playbackActive, @Nullable Long turnId, @Nullable String responseId) {
-            this.hasTrack = hasTrack;
-            this.playbackActive = playbackActive;
-            this.turnId = turnId;
-            this.responseId = responseId;
-        }
     }
 
     /**
