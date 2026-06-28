@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 
 import vip.xiaoweisoul.sdk.sessioncore.PcmFrame;
 
+import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.LinkedBlockingDeque;
@@ -62,6 +63,11 @@ final class AssistantPcmPlayer {
      * 每轮回复首帧 PCM 的样本级淡入时长，避免首样本从非零点硬起播产生 click/pop。
      */
     private static final int START_FADE_IN_MS = 8;
+
+    /**
+     * 首播先攒 3 帧再发车，先用最小逻辑提高起播稳定性。
+     */
+    private static final int START_BUFFER_FRAMES = 3;
 
     interface Logger {
         /**
@@ -180,6 +186,17 @@ final class AssistantPcmPlayer {
     }
 
     /**
+     * 告诉播放器：这一轮回复已经服务端收口。
+     * 这样短句即使不足 3 帧，也不会一直等首播门槛。
+     */
+    void markResponseStop(@Nullable Long turnId, @Nullable String responseId, @Nullable String reason) {
+        if (released.get()) {
+            return;
+        }
+        queue.offerLast(PlaybackItem.responseStop(turnId, responseId));
+    }
+
+    /**
      * 在本地发送 interrupt=true 前，先停掉当前播放，并持续屏蔽旧 response 的尾包。
      */
     void interruptAndSuppressCurrentResponse() {
@@ -256,9 +273,11 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 后台播放线程主循环：消费 PCM、处理停止命令，并在空闲时释放音频焦点但保留 AudioTrack。
+     * 后台播放线程主循环：消费 PCM、处理停止命令，并在空闲时把播放链路收口干净。
      */
     private void runLoop() {
+        ArrayDeque<PlaybackItem> startBuffer = new ArrayDeque<>();
+        PlaybackGateState gateState = new PlaybackGateState();
         try {
             while (true) {
                 PlaybackItem item = queue.pollFirst(IDLE_STOP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
@@ -272,7 +291,34 @@ final class AssistantPcmPlayer {
                     break;
                 }
                 if (item.type == PlaybackItem.TYPE_FLUSH_STOP) {
+                    startBuffer.clear();
+                    gateState.reset();
                     enterIdleState("收到停止命令");
+                    continue;
+                }
+                if (item.type == PlaybackItem.TYPE_RESPONSE_STOP) {
+                    gateState.onResponseStop(item.turnId, item.responseId);
+                    if (!gateState.started && gateState.canStart(startBuffer.size())) {
+                        while (!startBuffer.isEmpty()) {
+                            playFrame(startBuffer.removeFirst());
+                        }
+                        gateState.started = true;
+                    }
+                    continue;
+                }
+                if (!gateState.matches(item.turnId, item.responseId)) {
+                    startBuffer.clear();
+                    gateState.reset();
+                    gateState.bind(item.turnId, item.responseId);
+                }
+                if (!gateState.started) {
+                    startBuffer.addLast(item);
+                    if (gateState.canStart(startBuffer.size())) {
+                        while (!startBuffer.isEmpty()) {
+                            playFrame(startBuffer.removeFirst());
+                        }
+                        gateState.started = true;
+                    }
                     continue;
                 }
                 playFrame(item);
@@ -445,18 +491,21 @@ final class AssistantPcmPlayer {
     }
 
     /**
-     * 进入静默态：保留 AudioTrack 与当前焦点，只做本地静音，减少硬切播放链路导致的爆破音。
+     * 进入静默态：直接释放当前 AudioTrack，并归还音频焦点。
+     * 这样做的原因是上一轮播放结束后，底层 Track 可能已经因为 underrun 进入 disabled 状态；
+     * 如果继续复用，下一轮起播时就容易出现 restartIfDisabled，进而带来抖动或颤音。
      */
     private void enterIdleState(@NonNull String reason) {
         String idleLog = null;
         synchronized (audioLock) {
             boolean shouldLog = !idleStateEntered;
-            idleStateEntered = true;
-            muteAudioTrackLocked(null);
             if (shouldLog) {
                 idleLog = buildPlaybackIdleLogLocked(reason);
-                clearCurrentPlaybackStateLocked();
             }
+            muteAudioTrackLocked(null);
+            releaseAudioTrackLocked("进入静默态，丢弃可能已 underrun 的旧 AudioTrack");
+            abandonAudioFocusLocked();
+            idleStateEntered = true;
         }
         if (idleLog != null) {
             logLine(idleLog);
@@ -758,6 +807,56 @@ final class AssistantPcmPlayer {
         localPlaybackActive = false;
     }
 
+    /**
+     * 首播门槛状态只在播放线程内部使用，避免多线程同步复杂化。
+     */
+    private static final class PlaybackGateState {
+        @Nullable
+        private Long turnId;
+        @Nullable
+        private String responseId;
+        private boolean started;
+        private boolean responseStopped;
+
+        private void bind(@Nullable Long turnId, @Nullable String responseId) {
+            this.turnId = turnId;
+            this.responseId = normalizeResponseId(responseId);
+            this.started = false;
+            this.responseStopped = false;
+        }
+
+        private boolean matches(@Nullable Long turnId, @Nullable String responseId) {
+            return Objects.equals(this.turnId, turnId)
+                    && Objects.equals(this.responseId, normalizeResponseId(responseId));
+        }
+
+        private void onResponseStop(@Nullable Long turnId, @Nullable String responseId) {
+            if (this.turnId == null && this.responseId == null) {
+                bind(turnId, responseId);
+                responseStopped = true;
+                return;
+            }
+            if (!matches(turnId, responseId)) {
+                return;
+            }
+            responseStopped = true;
+        }
+
+        private boolean canStart(int bufferedFrames) {
+            if (bufferedFrames <= 0) {
+                return false;
+            }
+            return bufferedFrames >= START_BUFFER_FRAMES || responseStopped;
+        }
+
+        private void reset() {
+            turnId = null;
+            responseId = null;
+            started = false;
+            responseStopped = false;
+        }
+    }
+
     @NonNull
     private static String displayValue(@Nullable String value) {
         if (value == null || value.trim().isEmpty()) {
@@ -778,6 +877,7 @@ final class AssistantPcmPlayer {
         private static final int TYPE_PLAY = 1;
         private static final int TYPE_FLUSH_STOP = 2;
         private static final int TYPE_RELEASE = 3;
+        private static final int TYPE_RESPONSE_STOP = 4;
 
         private final int type;
         private final int sampleRateHz;
@@ -828,6 +928,11 @@ final class AssistantPcmPlayer {
         @NonNull
         private static PlaybackItem release() {
             return new PlaybackItem(TYPE_RELEASE, 0, 0, 0L, null, null, null);
+        }
+
+        @NonNull
+        private static PlaybackItem responseStop(@Nullable Long turnId, @Nullable String responseId) {
+            return new PlaybackItem(TYPE_RESPONSE_STOP, 0, 0, 0L, turnId, responseId, null);
         }
     }
 }

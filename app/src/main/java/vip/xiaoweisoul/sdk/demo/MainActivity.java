@@ -112,7 +112,6 @@ public class MainActivity extends AppCompatActivity {
     private final XiaoweiSessionClient sessionClient = XiaoweiSessionClients.create();
     // Demo 额外聚合多句 AI 文本，便于公开示例里展示一轮 response 的完整收口。
     private final AssistantResponseTracker assistantResponseTracker = new AssistantResponseTracker();
-
     // Demo 宿主负责正式的下行 PCM 播放链路，SDK 只负责回调统一 PcmFrame。
     private AssistantPcmPlayer assistantPcmPlayer;
     private String assistantPlaybackStrategyPreference;
@@ -401,6 +400,11 @@ public class MainActivity extends AppCompatActivity {
                     AssistantPcmPlayer player = assistantPcmPlayer;
                     if (player != null) {
                         player.interruptAndSuppressResponseFromServer(event.getResponseId(), event.getStopReason());
+                    }
+                } else {
+                    AssistantPcmPlayer player = assistantPcmPlayer;
+                    if (player != null) {
+                        player.markResponseStop(event.getTurnId(), event.getResponseId(), event.getStopReason());
                     }
                 }
                 assistantSpeaking = false;
