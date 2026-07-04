@@ -1,7 +1,7 @@
 apply plugin: "com.android.application"
 
 def sdkArtifactName = "xiaowei-session-core"
-def sdkVersion = "1.1.4"
+def sdkVersion = "1.2.0"
 def sdkGroupId = "vip.xiaoweisoul.sdk"
 def localConfig = new Properties()
 def localConfigFile = rootProject.file("local.properties")
@@ -62,8 +62,8 @@ android {
         applicationId "vip.xiaoweisoul.sdk.demo"
         minSdk 26
         targetSdk 34
-        versionCode 213
-        versionName "2.0.13"
+        versionCode 214
+        versionName "2.1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "SDK_GROUP_ID", "\"${sdkGroupId}\""
         buildConfigField "String", "SDK_ARTIFACT_NAME", "\"${sdkArtifactName}\""
