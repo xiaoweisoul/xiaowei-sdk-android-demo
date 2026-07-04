@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.1.4` をアプリへ組み込み、最小構成の会話フローを確認できます。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.2.0` をアプリへ組み込み、最小構成の会話フローを確認できます。
 
 Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
@@ -673,7 +673,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 
 未公開または変更直後の SDK をローカルで確認する場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。その後、Demo のローカル `local.properties` に `useLocalSdkRepo=true` を設定するか、コマンドラインで `-PuseLocalSdkRepo=true` を渡します。
 
-`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.1.4/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
+`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.2.0/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
 
 ### 3. 音声機能にはマイク権限が必要です
 
@@ -699,7 +699,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` またはローカルの `local.properties` で `useLocalSdkRepo=true` を有効にしている場合のみ、`local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.1.4/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.2.0/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 

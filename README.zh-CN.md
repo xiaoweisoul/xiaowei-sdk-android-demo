@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.1.4`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.2.0`，并验证最小会话闭环。
 
 Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
@@ -688,7 +688,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 如果要本地联调尚未发布或刚改完的 SDK，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`，再在 Demo 本机 `local.properties` 中设置 `useLocalSdkRepo=true`，或在命令行构建时传入 `-PuseLocalSdkRepo=true`。
 
-如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.1.4/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
+如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.2.0/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -712,7 +712,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.1.4/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.2.0/`
 
 ### 点击 Connect 后失败
 
