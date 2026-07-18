@@ -61,6 +61,8 @@ final class AppPrefs {
     private static final String KEY_DEMO_LANGUAGE = "demo_language";
     private static final String KEY_SESSION_PROMPT_ENABLED = "session_prompt_enabled";
     private static final String KEY_SESSION_PROMPT_TEXT = "session_prompt_text";
+    private static final String KEY_WELCOME_MESSAGE_ENABLED = "welcome_message_enabled";
+    private static final String KEY_WELCOME_MESSAGE_TEXT = "welcome_message_text";
     private static final String KEY_VOICE_INPUT_MODE = "voice_input_mode";
     static final String DEMO_LANGUAGE_ZH = "zh";
     static final String DEMO_LANGUAGE_JA = "ja";
@@ -72,6 +74,9 @@ final class AppPrefs {
     private static final String DEFAULT_TTS_PLAYBACK_STRATEGY = TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
     private static final String DEFAULT_VOICE_INPUT_MODE = VOICE_INPUT_MODE_REALTIME;
     private static final boolean DEFAULT_SESSION_PROMPT_ENABLED = false;
+    // 首次安装只预置可编辑文案，不主动播放；用户明确勾选后，下一次连接才会上报。
+    private static final boolean DEFAULT_WELCOME_MESSAGE_ENABLED = false;
+    private static final String DEFAULT_WELCOME_MESSAGE = "你好，欢迎使用小微。";
     private static final String DEFAULT_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
             + "\n"
             + "【广告内容】\n"
@@ -353,6 +358,36 @@ final class AppPrefs {
      */
     static void setSessionPrompt(@NonNull Context context, @NonNull String value) {
         putString(context, KEY_SESSION_PROMPT_TEXT, normalizeDraftText(value));
+    }
+
+    /**
+     * 读取下一次连接是否携带 hello.session_config.welcome_message；首次安装默认关闭。
+     */
+    static boolean isWelcomeMessageEnabled(@NonNull Context context) {
+        return getPreferences(context).getBoolean(KEY_WELCOME_MESSAGE_ENABLED, DEFAULT_WELCOME_MESSAGE_ENABLED);
+    }
+
+    /**
+     * 保存欢迎语开关。关闭只停止上报，不清除文本，方便用户以后重新启用。
+     * 例如用户临时不想播放欢迎语时取消勾选，再次勾选仍能继续使用上次编辑的内容。
+     */
+    static void setWelcomeMessageEnabled(@NonNull Context context, boolean enabled) {
+        putBoolean(context, KEY_WELCOME_MESSAGE_ENABLED, enabled);
+    }
+
+    /**
+     * 读取当前保存的欢迎语；用户从未编辑时返回公开默认文案。
+     */
+    @NonNull
+    static String getWelcomeMessage(@NonNull Context context) {
+        return getDraftString(context, KEY_WELCOME_MESSAGE_TEXT, DEFAULT_WELCOME_MESSAGE);
+    }
+
+    /**
+     * 保存欢迎语文本；允许保存空串，由主页面明确提示启用但内容为空时不会播放。
+     */
+    static void setWelcomeMessage(@NonNull Context context, @NonNull String value) {
+        putString(context, KEY_WELCOME_MESSAGE_TEXT, normalizeDraftText(value));
     }
 
     /**

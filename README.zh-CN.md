@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.2.0`，并验证最小会话闭环。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.2.1`，并验证最小会话闭环。当前 Demo 版本为 `2.1.1`（`versionCode 215`）。
 
 Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
@@ -62,16 +62,21 @@ Demo 运行时需要你自己填写以下参数：
 
 这些值不会在仓库中提供你的正式业务默认值。请根据自己的测试环境或业务环境填写。
 
-此外，当前 Demo 连接时还会额外上报以下配置，这些配置不在设置页中持久化维护：
+此外，当前 Demo 连接时还会额外上报以下配置：
 
 - `timezone`：连接时自动读取当前设备系统时区，并按 IANA 时区名上报到 hello 根节点，例如 `Asia/Shanghai`
 - `session_config.prompt`：用于给当前会话追加一段个性化角色定义提示词
+- `session_config.welcome_message`：握手成功后由服务端直接 TTS 播放的欢迎语，不经过 LLM
 - `session_config.idle_timeout_ms`：用于覆盖当前会话的静音超时配置
 
-其中 `prompt` 和 `idle_timeout_ms` 的默认值定义在 `app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` 中的：
+`prompt` 和 `welcome_message` 在主页面“连接配置”区域持久化维护：
 
-- `DEMO_HELLO_SESSION_PROMPT`
-- `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS`
+- 每项均采用“复选框 + 查看/编辑 + 单行摘要”；编辑内容只影响下一次 `connect()`。
+- 欢迎语首次安装默认关闭，但预置“你好，欢迎使用小微。”作为可编辑文案。
+- 取消勾选只停止上报，已保存文本不会被清除；勾选且内容为空时也不会上报。
+- 欢迎语使用普通 assistant 文本/PCM 回调播放，用户说话时允许按现有插话规则打断。
+
+`idle_timeout_ms` 仍由 `MainActivity.java` 中的 `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS` 演示常量控制。
 
 ## 如何运行
 
@@ -173,7 +178,7 @@ useLocalSdkRepo=true
 - `Connect / Disconnect`
 - `Realtime / Manual` 语音输入模式切换
 - `Manual` 模式下按住说话、松开发送
-- 在 Session Prompt 区域切换下一次连接是否启用 LLM Emotion
+- 在“连接配置”区域启用、查看和编辑 Session Prompt / 欢迎语，并切换 LLM Emotion
 - `Send Text`
 - 清空日志、查看会话状态和日志输出
 - 观察平台效果器状态日志、MCP 工具调用日志与 AI emotion 表情动画反馈
@@ -688,7 +693,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 如果要本地联调尚未发布或刚改完的 SDK，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`，再在 Demo 本机 `local.properties` 中设置 `useLocalSdkRepo=true`，或在命令行构建时传入 `-PuseLocalSdkRepo=true`。
 
-如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.2.0/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
+如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.2.1/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -712,7 +717,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.2.0/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.2.1/`
 
 ### 点击 Connect 后失败
 
@@ -724,7 +729,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - `Integration App ID` 是否填写为应用中心展示的字符串 `app_id`，例如 `app_g1ht6a8o`
 - 如果要验证记忆能力，`End User ID` 是否已填写为当前真实用户的稳定唯一标识
 - `Soul ID`、`Protocol Version` 是否正确
-- 如果服务端返回的是 `invalid hello: ...` 这类握手失败，请再检查 `MainActivity.java` 里硬编码的 `DEMO_HELLO_SESSION_PROMPT` / `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS` 是否符合当前服务端约束
+- 如果服务端返回的是 `invalid hello: ...` 这类握手失败，请检查主页面保存的 Session Prompt / 欢迎语，以及 `MainActivity.java` 里的 `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS` 是否符合当前服务端约束
 
 ### 连接成功但无法开麦
 

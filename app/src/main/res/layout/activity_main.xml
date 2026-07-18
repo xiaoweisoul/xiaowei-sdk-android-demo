@@ -275,54 +275,114 @@
             </LinearLayout>
 
             <LinearLayout
-                android:id="@+id/layout_session_prompt_section"
+                android:id="@+id/layout_session_config_section"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical">
 
                 <TextView
-                    android:id="@+id/text_session_prompt_label"
+                    android:id="@+id/text_session_config_label"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="@string/session_prompt_label"
+                    android:text="@string/session_config_label"
                     android:textColor="@color/demo_text_secondary"
                     android:textSize="12sp" />
 
-                <CheckBox
-                    android:id="@+id/checkbox_session_prompt_enabled"
+                <LinearLayout
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:checked="false"
-                    android:text="@string/session_prompt_enabled_checkbox"
-                    android:textColor="@color/demo_text_primary" />
+                    android:layout_height="48dp"
+                    android:layout_marginTop="2dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <CheckBox
-                    android:id="@+id/checkbox_emotion_enabled"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:checked="true"
-                    android:text="@string/emotion_enabled_checkbox"
-                    android:textColor="@color/demo_text_primary" />
+                    <CheckBox
+                        android:id="@+id/checkbox_session_prompt_enabled"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:checked="false"
+                        android:text="@string/session_prompt_enabled_checkbox"
+                        android:textColor="@color/demo_text_primary" />
 
-                <Button
-                    android:id="@+id/button_edit_session_prompt"
-                    android:layout_width="match_parent"
-                    android:layout_height="44dp"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/session_prompt_edit_button"
-                    android:textAllCaps="false" />
+                    <TextView
+                        android:id="@+id/button_edit_session_prompt"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minWidth="80dp"
+                        android:paddingLeft="8dp"
+                        android:paddingRight="8dp"
+                        android:text="@string/session_config_edit_button"
+                        android:textColor="@color/demo_primary_dark"
+                        android:textSize="13sp" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/text_session_prompt_summary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:maxLines="3"
+                    android:layout_marginStart="40dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
                     android:text="@string/session_prompt_summary_disabled_empty"
                     android:textColor="@color/demo_text_secondary"
                     android:textSize="12sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <CheckBox
+                        android:id="@+id/checkbox_welcome_message_enabled"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:checked="false"
+                        android:text="@string/welcome_message_enabled_checkbox"
+                        android:textColor="@color/demo_text_primary" />
+
+                    <TextView
+                        android:id="@+id/button_edit_welcome_message"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:background="?attr/selectableItemBackgroundBorderless"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center"
+                        android:minWidth="80dp"
+                        android:paddingLeft="8dp"
+                        android:paddingRight="8dp"
+                        android:text="@string/session_config_edit_button"
+                        android:textColor="@color/demo_primary_dark"
+                        android:textSize="13sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/text_welcome_message_summary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="40dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/welcome_message_summary_disabled_empty"
+                    android:textColor="@color/demo_text_secondary"
+                    android:textSize="12sp" />
+
+                <CheckBox
+                    android:id="@+id/checkbox_emotion_enabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:checked="true"
+                    android:text="@string/emotion_enabled_checkbox"
+                    android:textColor="@color/demo_text_primary" />
             </LinearLayout>
 
             <LinearLayout
