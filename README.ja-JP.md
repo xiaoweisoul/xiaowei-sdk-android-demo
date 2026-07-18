@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.2.0` をアプリへ組み込み、最小構成の会話フローを確認できます。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.2.1` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.1.1`（`versionCode 215`）です。
 
 Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
@@ -69,16 +69,21 @@ Demo の実行には、次のパラメータが必要です。
 
 これらの値の正式な業務設定は、このリポジトリには含まれていません。利用時は、自分のテスト環境または業務環境の設定値を使用してください。
 
-また、現在の Demo は接続時に次の設定も上報します。これらは設定画面には保存されません。
+また、現在の Demo は接続時に次の設定も上報します。
 
 - `timezone`: 接続時に端末の現在のシステムタイムゾーンを読み取り、`Asia/Shanghai` のような IANA タイムゾーン名として hello ルートへ上報します
 - `session_config.prompt`: 現在の session に個別の役割プロンプトを追加します
+- `session_config.welcome_message`: handshake 成功後に LLM を経由せず、サーバーが直接 TTS 再生するウェルカムメッセージです
 - `session_config.idle_timeout_ms`: 現在の session の無音タイムアウト設定を上書きします
 
-`prompt` と `idle_timeout_ms` の既定値は、`app/src/main/java/vip/xiaoweisoul/sdk/demo/MainActivity.java` の次の定数で定義されています。
+`prompt` と `welcome_message` はメイン画面の「接続設定」エリアで保存・管理します。
 
-- `DEMO_HELLO_SESSION_PROMPT`
-- `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS`
+- 各項目は checkbox、表示 / 編集、1 行 summary で構成され、編集内容は次回の `connect()` から反映されます。
+- ウェルカムメッセージは初回インストール時に無効ですが、「你好，欢迎使用小微。」を編集可能な初期文として表示します。
+- checkbox を外しても保存済みテキストは削除されません。有効でも内容が空の場合は上報しません。
+- 通常の assistant テキスト / PCM callback で再生し、ユーザーの割り込み時は既存ルールで停止します。
+
+`idle_timeout_ms` は引き続き `MainActivity.java` の `DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS` デモ定数で制御します。
 
 ## 実行方法
 
@@ -177,7 +182,7 @@ useLocalSdkRepo=true
 - ドロップダウンで利用可能な元神を切り替える
 - `Connect / Disconnect`
 - `Start Listen / Stop Listen`
-- Session Prompt エリアで、次回接続時に LLM Emotion を有効化するか切り替える
+- 「接続設定」エリアで Session Prompt / ウェルカムメッセージを有効化・編集し、LLM Emotion を切り替える
 - `Send Text`
 - ログをクリアし、セッション状態とログ出力を確認する
 - 録音前処理ログ、MCP ツール呼び出しログ、AI emotion 表情アニメーションの反映を確認する
@@ -673,7 +678,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 
 未公開または変更直後の SDK をローカルで確認する場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。その後、Demo のローカル `local.properties` に `useLocalSdkRepo=true` を設定するか、コマンドラインで `-PuseLocalSdkRepo=true` を渡します。
 
-`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.2.0/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
+`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.2.1/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
 
 ### 3. 音声機能にはマイク権限が必要です
 
@@ -699,7 +704,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` またはローカルの `local.properties` で `useLocalSdkRepo=true` を有効にしている場合のみ、`local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.2.0/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.2.1/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 

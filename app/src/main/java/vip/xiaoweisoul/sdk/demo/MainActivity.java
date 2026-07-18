@@ -148,13 +148,16 @@ public class MainActivity extends AppCompatActivity {
     private TextView sdkInfoLabelText;
     private TextView sdkInfoValueText;
     private TextView languageValueText;
-    private LinearLayout sessionPromptSectionLayout;
+    private LinearLayout sessionConfigSectionLayout;
     private TextView soulSelectorLabelText;
-    private TextView sessionPromptLabelText;
+    private TextView sessionConfigLabelText;
     private CheckBox sessionPromptEnabledCheckBox;
+    private CheckBox welcomeMessageEnabledCheckBox;
     private CheckBox emotionEnabledCheckBox;
-    private Button editSessionPromptButton;
+    private TextView editSessionPromptButton;
+    private TextView editWelcomeMessageButton;
     private TextView sessionPromptSummaryText;
+    private TextView welcomeMessageSummaryText;
     private TextView logsPanelTitleText;
     private TextView logsText;
     private ScrollView logsScrollView;
@@ -284,13 +287,16 @@ public class MainActivity extends AppCompatActivity {
         sdkInfoLabelText = findViewById(R.id.text_sdk_label);
         sdkInfoValueText = findViewById(R.id.text_sdk_value);
         languageValueText = findViewById(R.id.text_language_value);
-        sessionPromptSectionLayout = findViewById(R.id.layout_session_prompt_section);
+        sessionConfigSectionLayout = findViewById(R.id.layout_session_config_section);
         soulSelectorLabelText = findViewById(R.id.text_soul_selector_label);
-        sessionPromptLabelText = findViewById(R.id.text_session_prompt_label);
+        sessionConfigLabelText = findViewById(R.id.text_session_config_label);
         sessionPromptEnabledCheckBox = findViewById(R.id.checkbox_session_prompt_enabled);
+        welcomeMessageEnabledCheckBox = findViewById(R.id.checkbox_welcome_message_enabled);
         emotionEnabledCheckBox = findViewById(R.id.checkbox_emotion_enabled);
         editSessionPromptButton = findViewById(R.id.button_edit_session_prompt);
+        editWelcomeMessageButton = findViewById(R.id.button_edit_welcome_message);
         sessionPromptSummaryText = findViewById(R.id.text_session_prompt_summary);
+        welcomeMessageSummaryText = findViewById(R.id.text_welcome_message_summary);
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
@@ -520,13 +526,18 @@ public class MainActivity extends AppCompatActivity {
         });
         sessionPromptEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             AppPrefs.setSessionPromptEnabled(this, isChecked);
-            renderSessionPromptControls();
+            renderSessionConfigControls();
+        });
+        welcomeMessageEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            AppPrefs.setWelcomeMessageEnabled(this, isChecked);
+            renderSessionConfigControls();
         });
         emotionEnabledCheckBox.setOnCheckedChangeListener((buttonView, isChecked) -> {
             EmotionPrefs.setEnabled(this, isChecked);
             appendLog("[UI] LLM Emotion 下次连接=" + isChecked);
         });
         editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
+        editWelcomeMessageButton.setOnClickListener(v -> showWelcomeMessageDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
     }
 
@@ -644,7 +655,7 @@ public class MainActivity extends AppCompatActivity {
         sdkInfoLabelText.setText(getLocalizedText(R.string.sdk_info_label, R.string.sdk_info_label_ja, demoLanguage));
         voiceModeLabelText.setText(getLocalizedText(R.string.voice_mode_label, R.string.voice_mode_label_ja, demoLanguage));
         soulSelectorLabelText.setText(getLocalizedText(R.string.soul_selector_label, R.string.soul_selector_label_ja, demoLanguage));
-        sessionPromptLabelText.setText(getLocalizedText(R.string.session_prompt_label, R.string.session_prompt_label_ja, demoLanguage));
+        sessionConfigLabelText.setText(getLocalizedText(R.string.session_config_label, R.string.session_config_label_ja, demoLanguage));
         logsPanelTitleText.setText(getLocalizedText(R.string.logs_panel, R.string.logs_panel_ja, demoLanguage));
         clearLogsButton.setContentDescription(getLocalizedText(R.string.clear_logs, R.string.clear_logs_ja, demoLanguage));
         if (TextUtils.equals(logsText.getText(), getString(R.string.logs_empty))
@@ -654,7 +665,7 @@ public class MainActivity extends AppCompatActivity {
         refreshSoulSelectorLabels();
         renderSdkInfo();
         renderVoiceModeControls();
-        renderSessionPromptControls();
+        renderSessionConfigControls();
         updateActionButtons(currentSessionState);
     }
 
@@ -681,19 +692,28 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 刷新 Session Prompt 相关控件的文案与摘要，让“是否携带”和“当前内容”可见。
+     * 刷新连接级 Prompt / 欢迎语控件，让开关、编辑入口和单行摘要保持一致。
+     * 例如用户关闭欢迎语后仍展示已保存文本，但下一次 connect() 不会上报。
      */
-    private void renderSessionPromptControls() {
+    private void renderSessionConfigControls() {
         String demoLanguage = AppPrefs.getDemoLanguage(this);
-        boolean enabled = AppPrefs.isSessionPromptEnabled(this);
+        boolean promptEnabled = AppPrefs.isSessionPromptEnabled(this);
+        boolean welcomeEnabled = AppPrefs.isWelcomeMessageEnabled(this);
         boolean emotionEnabled = EmotionPrefs.isEnabled(this);
         String prompt = AppPrefs.getSessionPrompt(this);
+        String welcomeMessage = AppPrefs.getWelcomeMessage(this);
         sessionPromptEnabledCheckBox.setText(getLocalizedText(
                 R.string.session_prompt_enabled_checkbox,
                 R.string.session_prompt_enabled_checkbox_ja,
                 demoLanguage
         ));
-        sessionPromptEnabledCheckBox.setChecked(enabled);
+        sessionPromptEnabledCheckBox.setChecked(promptEnabled);
+        welcomeMessageEnabledCheckBox.setText(getLocalizedText(
+                R.string.welcome_message_enabled_checkbox,
+                R.string.welcome_message_enabled_checkbox_ja,
+                demoLanguage
+        ));
+        welcomeMessageEnabledCheckBox.setChecked(welcomeEnabled);
         emotionEnabledCheckBox.setText(getLocalizedText(
                 R.string.emotion_enabled_checkbox,
                 R.string.emotion_enabled_checkbox_ja,
@@ -701,11 +721,17 @@ public class MainActivity extends AppCompatActivity {
         ));
         emotionEnabledCheckBox.setChecked(emotionEnabled);
         editSessionPromptButton.setText(getLocalizedText(
-                R.string.session_prompt_edit_button,
-                R.string.session_prompt_edit_button_ja,
+                R.string.session_config_edit_button,
+                R.string.session_config_edit_button_ja,
                 demoLanguage
         ));
-        sessionPromptSummaryText.setText(buildSessionPromptSummary(demoLanguage, enabled, prompt));
+        editWelcomeMessageButton.setText(getLocalizedText(
+                R.string.session_config_edit_button,
+                R.string.session_config_edit_button_ja,
+                demoLanguage
+        ));
+        sessionPromptSummaryText.setText(buildSessionPromptSummary(demoLanguage, promptEnabled, prompt));
+        welcomeMessageSummaryText.setText(buildWelcomeMessageSummary(demoLanguage, welcomeEnabled, welcomeMessage));
     }
 
     /**
@@ -1234,6 +1260,9 @@ public class MainActivity extends AppCompatActivity {
             String sessionPrompt = AppPrefs.getSessionPrompt(this);
             boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
             boolean sessionPromptPresent = sessionPromptEnabled && !sessionPrompt.trim().isEmpty();
+            String welcomeMessage = AppPrefs.getWelcomeMessage(this);
+            boolean welcomeMessageEnabled = AppPrefs.isWelcomeMessageEnabled(this);
+            boolean welcomeMessagePresent = welcomeMessageEnabled && !welcomeMessage.trim().isEmpty();
             boolean emotionEnabled = EmotionPrefs.isEnabled(this);
             String helloTimeZone = ZoneId.systemDefault().getId();
             DebugOpenApiSessionTokenProvider provider = new DebugOpenApiSessionTokenProvider(
@@ -1257,6 +1286,9 @@ public class MainActivity extends AppCompatActivity {
             if (sessionPromptPresent) {
                 configBuilder.setSessionPrompt(sessionPrompt);
             }
+            if (welcomeMessagePresent) {
+                configBuilder.setWelcomeMessage(welcomeMessage);
+            }
             if (DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS != null) {
                 configBuilder.setSessionIdleTimeoutMs(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS);
             }
@@ -1272,6 +1304,9 @@ public class MainActivity extends AppCompatActivity {
                     + " helloSessionPromptEnabled=" + sessionPromptEnabled
                     + " helloSessionPromptPresent=" + sessionPromptPresent
                     + " helloSessionPromptLength=" + sessionPrompt.length()
+                    + " helloWelcomeMessageEnabled=" + welcomeMessageEnabled
+                    + " helloWelcomeMessagePresent=" + welcomeMessagePresent
+                    + " helloWelcomeMessageLength=" + welcomeMessage.length()
                     + " helloSessionIdleTimeoutMs=" + displayValue(DEMO_HELLO_SESSION_IDLE_TIMEOUT_MS)
                     + " helloEnableEmotion=" + emotionEnabled);
             sessionClient.connect(config);
@@ -1584,12 +1619,79 @@ public class MainActivity extends AppCompatActivity {
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String prompt = promptEdit.getText().toString();
             AppPrefs.setSessionPrompt(this, prompt);
-            renderSessionPromptControls();
+            renderSessionConfigControls();
             appendLog("[UI] 已保存 Session Prompt length=" + prompt.length());
             dialog.dismiss();
         }));
         dialog.show();
         promptEdit.requestFocus();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+        }
+    }
+
+    /**
+     * 弹出欢迎语查看/编辑对话框；保存文本不自动打开开关，避免一次编辑意外改变连接行为。
+     * 例如默认关闭时用户先准备好文案，只有之后明确勾选“连接时播放欢迎语”才会在下次连接上报。
+     */
+    private void showWelcomeMessageDialog() {
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+
+        LinearLayout container = new LinearLayout(this);
+        container.setOrientation(LinearLayout.VERTICAL);
+        int padding = dp(20);
+        container.setPadding(padding, dp(16), padding, 0);
+
+        TextView hintText = new TextView(this);
+        hintText.setText(getLocalizedText(
+                R.string.welcome_message_dialog_hint,
+                R.string.welcome_message_dialog_hint_ja,
+                demoLanguage
+        ));
+        hintText.setTextColor(ContextCompat.getColor(this, R.color.demo_text_secondary));
+        container.addView(hintText, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        EditText welcomeEdit = new EditText(this);
+        welcomeEdit.setMinLines(4);
+        welcomeEdit.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        welcomeEdit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        welcomeEdit.setHint(getLocalizedText(
+                R.string.welcome_message_dialog_input_hint,
+                R.string.welcome_message_dialog_input_hint_ja,
+                demoLanguage
+        ));
+        welcomeEdit.setText(AppPrefs.getWelcomeMessage(this));
+        welcomeEdit.setSelection(welcomeEdit.getText().length());
+        LinearLayout.LayoutParams welcomeParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+        );
+        welcomeParams.topMargin = dp(12);
+        container.addView(welcomeEdit, welcomeParams);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(getLocalizedText(
+                        R.string.welcome_message_dialog_title,
+                        R.string.welcome_message_dialog_title_ja,
+                        demoLanguage
+                ))
+                .setView(container)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(getLocalizedText(R.string.save, R.string.save_ja, demoLanguage), null)
+                .create();
+
+        dialog.setOnShowListener(dialogInterface -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
+            String welcomeMessage = welcomeEdit.getText().toString();
+            AppPrefs.setWelcomeMessage(this, welcomeMessage);
+            renderSessionConfigControls();
+            appendLog("[UI] 已保存 Welcome Message length=" + welcomeMessage.length());
+            dialog.dismiss();
+        }));
+        dialog.show();
+        welcomeEdit.requestFocus();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
         }
@@ -1743,11 +1845,13 @@ public class MainActivity extends AppCompatActivity {
             voiceModeRealtimeRadio.setEnabled(canSwitchVoiceMode);
             voiceModeSummaryText.setText(buildVoiceModeSummary(demoLanguage, voiceMode));
             soulSelectorSectionLayout.setVisibility(showSetupSections ? View.VISIBLE : View.GONE);
-            sessionPromptSectionLayout.setVisibility(showSetupSections ? View.VISIBLE : View.GONE);
+            sessionConfigSectionLayout.setVisibility(showSetupSections ? View.VISIBLE : View.GONE);
             soulSelectorSpinner.setEnabled(state == SessionState.DISCONNECTED && !soulProfilesLoading && !soulProfiles.isEmpty());
             sessionPromptEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
+            welcomeMessageEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
             emotionEnabledCheckBox.setEnabled(state == SessionState.DISCONNECTED);
             editSessionPromptButton.setEnabled(state == SessionState.DISCONNECTED);
+            editWelcomeMessageButton.setEnabled(state == SessionState.DISCONNECTED);
             updateListenButtonIcon(manualMode);
             listenButton.setBackgroundTintList(ContextCompat.getColorStateList(this,
                     listenButton.isEnabled() ? R.color.demo_primary_dark : R.color.demo_button_disabled));
@@ -2155,7 +2259,7 @@ public class MainActivity extends AppCompatActivity {
                     language
             );
         }
-        String preview = abbreviatePromptPreview(normalized);
+        String preview = abbreviateSessionTextPreview(normalized);
         int length = prompt.length();
         int resId = AppPrefs.DEMO_LANGUAGE_JA.equals(language)
                 ? (enabled ? R.string.session_prompt_summary_enabled_ja : R.string.session_prompt_summary_disabled_ja)
@@ -2164,11 +2268,32 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 把长 prompt 收敛成单行预览，便于首页快速判断当前配置内容。
+     * 生成欢迎语单行摘要；关闭时仍展示已保存内容，让用户知道重新勾选后会播放什么。
      */
     @NonNull
-    private String abbreviatePromptPreview(@NonNull String prompt) {
-        String preview = prompt.replace('\r', ' ').replace('\n', ' ').trim();
+    private String buildWelcomeMessageSummary(@NonNull String language, boolean enabled, @NonNull String welcomeMessage) {
+        String normalized = welcomeMessage.trim();
+        if (normalized.isEmpty()) {
+            return getLocalizedText(
+                    enabled ? R.string.welcome_message_summary_enabled_empty : R.string.welcome_message_summary_disabled_empty,
+                    enabled ? R.string.welcome_message_summary_enabled_empty_ja : R.string.welcome_message_summary_disabled_empty_ja,
+                    language
+            );
+        }
+        String preview = abbreviateSessionTextPreview(normalized);
+        int length = welcomeMessage.length();
+        int resId = AppPrefs.DEMO_LANGUAGE_JA.equals(language)
+                ? (enabled ? R.string.welcome_message_summary_enabled_ja : R.string.welcome_message_summary_disabled_ja)
+                : (enabled ? R.string.welcome_message_summary_enabled : R.string.welcome_message_summary_disabled);
+        return getString(resId, length, preview);
+    }
+
+    /**
+     * 把长连接配置文本收敛成单行预览，便于首页快速判断 Prompt 或欢迎语内容。
+     */
+    @NonNull
+    private String abbreviateSessionTextPreview(@NonNull String text) {
+        String preview = text.replace('\r', ' ').replace('\n', ' ').trim();
         if (preview.length() <= 48) {
             return preview;
         }
