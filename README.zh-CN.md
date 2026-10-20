@@ -16,7 +16,8 @@ Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验�
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
-- 演示如何注册本地工具、配置可选 `waitingMessage`，并通过 MCP 控制媒体音量和系统全局亮度
+- 演示如何注册本地工具、配置可选 `waitingMessage` / `beforeCallMessage`，并通过 MCP 控制媒体音量、系统全局亮度和内置示例音乐
+- 演示工具结果里的 `endSession`：放歌后由服务端收尾断开会话，音乐继续播放；日志面板下方的迷你播放器可暂停、继续、结束和拖动进度
 - 演示如何在 hello 阶段启用 LLM Emotion，并在右上角播放对应表情动画
 - 演示服务端主动断链时，如何在 `[Session]` 日志里直接看到远端 `closeCode / closeReason`
 
@@ -181,6 +182,7 @@ useLocalSdkRepo=true
 - 在“连接配置”区域启用、查看和编辑 Session Prompt / 欢迎语，并切换 LLM Emotion
 - `Send Text`
 - 清空日志、查看会话状态和日志输出
+- 日志面板下方的常驻迷你音乐播放器：进度条、播放/暂停、结束；空闲时也可以直接手动试听
 - 观察平台效果器状态日志、MCP 工具调用日志与 AI emotion 表情动画反馈
 
 主页面日志里建议重点看下面几类标签：
@@ -193,6 +195,7 @@ useLocalSdkRepo=true
 - `[AI表情]`：服务端 LLM emotion 事件，右上角表情区域只由这类事件驱动
 - `[TtsPlayer] [本地播放开始]`：宿主本地播放链路已经启动
 - `[TtsPlayer] [本地播放收口]`：Demo 里的本地播放链路进入收口/空闲态，更接近广告切入参考时机
+- `[Demo] 开始播放内置音乐` / `[UI] 示例音乐已暂停`：本地音乐播放器的启停记录（工具触发和手动操作都会打）
 - `[Session]`：直接打印 `SessionStateEvent.toString()`；如果服务端下发了 WebSocket close frame，这里会带上 `closeCode` 和 `closeReason`
 
 ### 设置页
