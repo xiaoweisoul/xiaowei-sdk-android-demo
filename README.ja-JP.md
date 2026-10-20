@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.2.1` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.1.1`（`versionCode 215`）です。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.3.0` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.2.0`（`versionCode 216`）です。
 
 Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
@@ -24,7 +24,8 @@ Demo のコミット済み既定値は Maven Central から SDK を取得する�
 - 長い応答、複数文のテキスト、`barge_in` 割り込み、ローカル PCM 再生の収束タイミングの理解
 - メイン画面の言語切り替え、利用可能な元神の読み込み / 切り替え、ログ確認の流れ
 - 録音前処理ステータス、Assistant PCM 再生、ローカルツール呼び出し、AI emotion 表示の確認
-- MCP ツールごとの任意 `waitingMessage` と、サーバー側デフォルト待機文言へのフォールバック動作の確認
+- MCP ツールごとの任意 `waitingMessage` / `beforeCallMessage` と、サーバー側デフォルト待機文言へのフォールバック動作の確認
+- ツール結果の `endSession` によるセッション終了の確認: 音楽再生後はサーバーが応答を締めて切断し、音楽はそのまま続きます。ログパネル下のミニプレイヤーで一時停止・再開・停止・進捗移動ができます
 - サーバーからの WebSocket close frame が発生した場合に、`[Session]` ログで `closeCode / closeReason` を確認する方法
 
 SDK を組み込むこと自体が目的であれば、この Demo を直接改造する必要はありません。通常は次の順番で確認することを推奨します。
@@ -185,6 +186,7 @@ useLocalSdkRepo=true
 - 「接続設定」エリアで Session Prompt / ウェルカムメッセージを有効化・編集し、LLM Emotion を切り替える
 - `Send Text`
 - ログをクリアし、セッション状態とログ出力を確認する
+- ログパネル下に常設のミニ音楽プレイヤー（進捗バー、再生/一時停止、停止）。未再生でも手動で試聴できます
 - 録音前処理ログ、MCP ツール呼び出しログ、AI emotion 表情アニメーションの反映を確認する
 
 メイン画面のログでは、特に次のタグを見ることを推奨します。
@@ -197,6 +199,7 @@ useLocalSdkRepo=true
 - `[AI表情]`: サーバーからの LLM emotion イベント。右上の表情エリアはこのイベントだけで更新される
 - `[TtsPlayer] [本地播放开始]`: ホストアプリ側のローカル再生チェーンが実際に開始した
 - `[TtsPlayer] [本地播放收口]`: Demo 側のローカル再生チェーンがアイドルへ戻り始めた。広告挿入タイミングの参考に近い
+- `[Demo] 开始播放内置音乐` / `[UI] 示例音乐已暂停`: ローカル音楽プレイヤーの開始・停止記録（ツール経由と手動操作の両方）
 - `[Session]`: `SessionStateEvent.toString()` をそのまま出力する。サーバーが WebSocket close frame を返した場合は `closeCode` と `closeReason` もここに表示される
 
 ### 設定画面
@@ -211,19 +214,25 @@ useLocalSdkRepo=true
 
 ### Demo 内蔵 MCP ツール
 
-現在の Demo は `MainActivity.registerMcpTools()` で次の 5 つの最小デバイス制御ツールを登録しています。表情ツールは登録しません。
+現在の Demo は `MainActivity.registerMcpTools()` で次の 6 つの最小デバイス制御ツールを登録しています。表情ツールは登録しません。
 
 - `set_media_volume(percent)`: メディア音量を指定パーセントへ設定します。JSON Schema、引数解析、引数検証、独自 `waitingMessage` の例です
-- `increase_media_volume()`: メディア音量を約 10% 上げる
+- `increase_media_volume()`: メディア音量を約 10% 上げる。実行前メッセージ `好的，我马上给你调` を設定しています
 - `decrease_media_volume()`: メディア音量を約 10% 下げる
 - `increase_screen_brightness()`: システム全体の画面輝度を約 10% 上げる
 - `decrease_screen_brightness()`: システム全体の画面輝度を約 10% 下げる
+- `play_music()`: `app/src/main/res/raw/music1.mp3` の内蔵サンプル音楽を再生します。実行前メッセージ `好的，我马上给你放` を設定し、再生開始後に `SessionToolResult.endSession(...)` を返すと、サーバーは `goodbye` を送って終了コード `1000` で切断します
 
 補足:
 
 - 右上の表情エリアは `onAssistantEmotion()` だけで更新され、リソースは `app/src/main/assets/emotion/` にあります
 - `set_media_volume(percent)` は引数付きツールで、`percent` は `0..100` の整数です。`invoke(argumentsJson)` でも再検証し、モデルへ提示した JSON Schema だけには依存しません
-- `set_media_volume(percent)` の独自待機文言は `正在为你调整音量` です。残り 4 つの引数なしツールは待機文言を設定せず、サーバー既定文言との比較に使えます
+- `set_media_volume(percent)` の独自待機文言は `正在为你调整音量` です。その他の引数なしツールは待機文言を設定せず、サーバー既定文言との比較に使えます
+- `increase_media_volume()` は `getBeforeCallMessage()` で `好的，我马上给你调` を返し、毎回この文を再生し終えてから `tools/call` が届きます。`decrease_media_volume()` には設定していないため、両者の違いを直接比較できます
+- `play_music()` の実行前メッセージ `好的，我马上给你放` により、AI の音声を再生し終えてからツールが実行されるため、音楽と発話が重なりません。ツール説明では、呼び出し前にモデル自身が再度予告しないよう指示しています
+- `play_music()` は再生成功後に `SessionToolResult.endSession(...)` を返すため、AI は続きを話さず、サーバーが応答を締めてから切断します。Demo は `DISCONNECTED` 受信時にセッション資源だけを解放し、この音楽は停止しません
+- ログパネルの下にミニプレイヤーを常設します。進捗バーはドラッグで再生位置を変更でき、再生/一時停止は同じボタン、別に停止ボタンがあります。未再生のときは「未再生」と表示され、AI と話さなくても再生ボタンから手動で試せます
+- 音楽の再生中に再度 `Connect` すると、Demo は AI 音声と重ならないよう先に音楽を停止します。Activity 破棄時にもプレイヤーを解放します
 - 音量は端末の離散的な音量段階に丸められ、輝度は毎回システムの現在値を読み直したうえで、全体レンジの 10% ステップでシステム全体へ書き戻します
 - 端末が自動画面輝度モードの場合、最初の輝度ツール呼び出しで手動画面輝度モードへ切り替えます
 - 輝度ツールを初めて使うときは、Android の「システム設定の変更」権限を求められることがあります。未許可の場合はツールが失敗し、権限設定画面を開きます
@@ -678,7 +687,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 
 未公開または変更直後の SDK をローカルで確認する場合は、隣接する SDK リポジトリで先に `./build_android_sdk.sh` を実行してください。その後、Demo のローカル `local.properties` に `useLocalSdkRepo=true` を設定するか、コマンドラインで `-PuseLocalSdkRepo=true` を渡します。
 
-`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.2.1/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
+`local-sdk-repo/` に `vip/xiaoweisoul/sdk/session-core/1.3.0/` が無い場合は、現在の SDK バージョンが Demo へ同期されていません。隣接する SDK リポジトリで `./build_android_sdk.sh` を再実行してください。
 
 ### 3. 音声機能にはマイク権限が必要です
 
@@ -704,7 +713,7 @@ AI 応答 stop(reason=barge_in / input_text / stopword)
 - デフォルトモードでは Maven Central 上に当該バージョンが存在するか
 - ネットワークから Maven Central に到達できるか
 - `-PuseLocalSdkRepo=true` またはローカルの `local.properties` で `useLocalSdkRepo=true` を有効にしている場合のみ、`local-sdk-repo/` が存在するか
-- `vip/xiaoweisoul/sdk/session-core/1.2.1/` が実際に含まれているか
+- `vip/xiaoweisoul/sdk/session-core/1.3.0/` が実際に含まれているか
 
 ### `Connect` を押しても失敗する
 

@@ -432,6 +432,91 @@
                     android:textIsSelectable="true"
                     android:typeface="monospace" />
             </ScrollView>
+
+            <!-- 常驻音乐播放条：固定在日志面板下方，空闲时也能手动播放。 -->
+            <LinearLayout
+                android:id="@+id/layout_music_controls"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:background="@color/demo_panel_bg"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/text_music_title"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/music_player_title"
+                        android:textColor="@color/demo_text_primary"
+                        android:textSize="13sp" />
+
+                    <TextView
+                        android:id="@+id/text_music_state"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/music_state_idle"
+                        android:textColor="@color/demo_text_secondary"
+                        android:textSize="12sp" />
+                </LinearLayout>
+
+                <SeekBar
+                    android:id="@+id/seek_music_progress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:contentDescription="@string/music_progress"
+                    android:max="1000" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/text_music_time"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="0:00 / 0:00"
+                        android:textColor="@color/demo_text_secondary"
+                        android:textSize="12sp" />
+
+                    <Button
+                        android:id="@+id/button_music_toggle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:backgroundTint="@color/demo_primary"
+                        android:minWidth="72dp"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:text="@string/music_play"
+                        android:textAllCaps="false"
+                        android:textColor="@color/demo_text_inverse" />
+
+                    <Button
+                        android:id="@+id/button_music_stop"
+                        android:layout_width="wrap_content"
+                        android:layout_height="40dp"
+                        android:layout_marginStart="8dp"
+                        android:backgroundTint="@color/demo_button_disabled"
+                        android:enabled="false"
+                        android:minWidth="72dp"
+                        android:paddingLeft="12dp"
+                        android:paddingRight="12dp"
+                        android:text="@string/music_stop"
+                        android:textAllCaps="false"
+                        android:textColor="@color/demo_text_inverse" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 

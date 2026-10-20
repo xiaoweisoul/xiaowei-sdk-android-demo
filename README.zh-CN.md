@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.2.1`，并验证最小会话闭环。当前 Demo 版本为 `2.1.1`（`versionCode 215`）。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.3.0`，并验证最小会话闭环。当前 Demo 版本为 `2.2.0`（`versionCode 216`）。
 
 Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
@@ -16,7 +16,8 @@ Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验�
 - 演示长回复、多句文本、插话打断 `barge_in`、本地 PCM 播放收口这些典型时序
 - 演示主页面语言切换、动态加载可用元神与日志排查流程
 - 演示平台录音前处理状态的启动预检/录音实检，以及 Assistant PCM 下行播放
-- 演示如何注册本地工具、配置可选 `waitingMessage`，并通过 MCP 控制媒体音量和系统全局亮度
+- 演示如何注册本地工具、配置可选 `waitingMessage` / `beforeCallMessage`，并通过 MCP 控制媒体音量、系统全局亮度和内置示例音乐
+- 演示工具结果里的 `endSession`：放歌后由服务端收尾断开会话，音乐继续播放；日志面板下方的迷你播放器可暂停、继续、结束和拖动进度
 - 演示如何在 hello 阶段启用 LLM Emotion，并在右上角播放对应表情动画
 - 演示服务端主动断链时，如何在 `[Session]` 日志里直接看到远端 `closeCode / closeReason`
 
@@ -181,6 +182,7 @@ useLocalSdkRepo=true
 - 在“连接配置”区域启用、查看和编辑 Session Prompt / 欢迎语，并切换 LLM Emotion
 - `Send Text`
 - 清空日志、查看会话状态和日志输出
+- 日志面板下方的常驻迷你音乐播放器：进度条、播放/暂停、结束；空闲时也可以直接手动试听
 - 观察平台效果器状态日志、MCP 工具调用日志与 AI emotion 表情动画反馈
 
 主页面日志里建议重点看下面几类标签：
@@ -193,6 +195,7 @@ useLocalSdkRepo=true
 - `[AI表情]`：服务端 LLM emotion 事件，右上角表情区域只由这类事件驱动
 - `[TtsPlayer] [本地播放开始]`：宿主本地播放链路已经启动
 - `[TtsPlayer] [本地播放收口]`：Demo 里的本地播放链路进入收口/空闲态，更接近广告切入参考时机
+- `[Demo] 开始播放内置音乐` / `[UI] 示例音乐已暂停`：本地音乐播放器的启停记录（工具触发和手动操作都会打）
 - `[Session]`：直接打印 `SessionStateEvent.toString()`；如果服务端下发了 WebSocket close frame，这里会带上 `closeCode` 和 `closeReason`
 
 ### 设置页
@@ -207,19 +210,25 @@ useLocalSdkRepo=true
 
 ### Demo 内置 MCP 工具
 
-当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 5 个最小设备控制工具，不再注册表情工具：
+当前 Demo 在 `MainActivity.registerMcpTools()` 里注册了 6 个最小设备控制工具，不再注册表情工具：
 
 - `set_media_volume(percent)`：把媒体音量设置到指定百分比；演示 JSON Schema、参数解析、参数校验与自定义 `waitingMessage`
-- `increase_media_volume()`：把媒体音量调大约 10%
+- `increase_media_volume()`：把媒体音量调大约 10%；配置了执行前提示语 `好的，我马上给你调`
 - `decrease_media_volume()`：把媒体音量调小约 10%
 - `increase_screen_brightness()`：把系统全局屏幕亮度调高约 10%
 - `decrease_screen_brightness()`：把系统全局屏幕亮度调低约 10%
+- `play_music()`：播放 `app/src/main/res/raw/music1.mp3` 内置示例音乐；配置了执行前提示语 `好的，我马上给你放`，播放成功后返回 `SessionToolResult.endSession(...)`，服务端发 `goodbye` 并以关闭码 `1000` 断开
 
 需要注意：
 
 - 右上角表情区域只由 `onAssistantEmotion()` 驱动，资源位于 `app/src/main/assets/emotion/`
 - `set_media_volume(percent)` 是带参数工具，`percent` 必须是 `0..100` 的整数；`invoke(argumentsJson)` 仍会再次校验参数，不能只依赖上报给模型的 JSON Schema
-- `set_media_volume(percent)` 自定义等待语为 `正在为你调整音量`；其余 4 个无参工具不设置等待语，用于对照观察服务端默认等待语
+- `set_media_volume(percent)` 自定义等待语为 `正在为你调整音量`；其余无参工具不设置等待语，用于对照观察服务端默认等待语
+- `increase_media_volume()` 通过 `getBeforeCallMessage()` 返回 `好的，我马上给你调`，每次调用都先播完这句才下发 `tools/call`；`decrease_media_volume()` 没有配置，可以直接对比两者差异
+- `play_music()` 的前置语 `好的，我马上给你放` 保证 AI 语音播完才执行工具，不会出现音乐和说话叠在一起；工具描述里要求模型不要在调用前自己再预告一遍
+- `play_music()` 播放成功后返回 `SessionToolResult.endSession(...)`，服务端不再让 AI 接话，本轮收尾后主动断开；Demo 收到 `DISCONNECTED` 时只释放会话资源，不会停掉这段音乐
+- 日志面板下方常驻一个迷你播放器：进度条可拖动定位，播放/暂停共用一个按键，另有结束按键；空闲时状态显示“未播放”，也可以直接点播放手动试听，不必先和 AI 对话
+- 音乐播放期间重新点击 `Connect`，Demo 会先停掉音乐再建连，避免和 AI 语音叠加；Activity 销毁时也会释放播放器
 - 音量最终会落到系统离散音量档位；亮度每次都会读取系统当前值，再按完整范围的 10% 步长写回系统全局亮度
 - 如果设备当前处于自动亮度模式，首次亮度工具调用会先切到手动模式
 - 首次使用亮度工具时，系统可能要求授予“修改系统设置”权限；未授权时工具会返回失败并拉起授权页
@@ -693,7 +702,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 
 如果要本地联调尚未发布或刚改完的 SDK，请先在相邻 SDK 仓库执行 `./build_android_sdk.sh`，再在 Demo 本机 `local.properties` 中设置 `useLocalSdkRepo=true`，或在命令行构建时传入 `-PuseLocalSdkRepo=true`。
 
-如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.2.1/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
+如果 `local-sdk-repo/` 缺少 `vip/xiaoweisoul/sdk/session-core/1.3.0/`，说明本地 SDK 仓库还没有同步到当前版本，请重新执行相邻 SDK 仓库的 `./build_android_sdk.sh`。
 
 ### 3. 语音能力需要麦克风权限
 
@@ -717,7 +726,7 @@ AI 回复 stop(reason=barge_in / input_text / stopword)
 - Android Studio / Gradle 环境是否完整
 - 是否按本文步骤在仓库根目录执行了构建命令
 - 如果报的是依赖解析失败，再检查 Maven Central 是否可访问
-- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.2.1/`
+- 只有在你显式启用了 `-PuseLocalSdkRepo=true` 或本机 `local.properties` 设置了 `useLocalSdkRepo=true` 时，才需要再检查 `local-sdk-repo/` 是否存在，以及是否确实包含 `vip/xiaoweisoul/sdk/session-core/1.3.0/`
 
 ### 点击 Connect 后失败
 
