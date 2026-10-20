@@ -118,7 +118,15 @@ public class MainActivity extends AppCompatActivity {
     // Demo 宿主负责正式的下行 PCM 播放链路，SDK 只负责回调统一 PcmFrame。
     private AssistantPcmPlayer assistantPcmPlayer;
     // 放歌工具自己持有的播放器；会话结束后音乐要继续播，所以不能挂在 TTS 播放链路上。
-    private MediaPlayer musicPlayer;
+    private volatile MediaPlayer musicPlayer;
+    // 工具线程和 UI 线程都会读写播放状态，用 volatile 保证界面看到的是最新值。
+    private volatile boolean musicPaused;
+    // 音乐控制区默认隐藏，play_music 真正开始播放后才显示。
+    private LinearLayout musicControlLayout;
+    private TextView musicTitleText;
+    private Button musicToggleButton;
+    private Button musicStopButton;
+    private TextView musicHintText;
     private String assistantPlaybackStrategyPreference;
 
     // 按文档建议，Demo 在单次连接内用简单自增数字生成 client_input_id。
@@ -306,6 +314,11 @@ public class MainActivity extends AppCompatActivity {
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
+        musicControlLayout = findViewById(R.id.layout_music_controls);
+        musicTitleText = findViewById(R.id.text_music_title);
+        musicToggleButton = findViewById(R.id.button_music_toggle);
+        musicStopButton = findViewById(R.id.button_music_stop);
+        musicHintText = findViewById(R.id.text_music_hint);
         mainContentBaseBottomPadding = mainContentLayout.getPaddingBottom();
     }
 
@@ -545,6 +558,11 @@ public class MainActivity extends AppCompatActivity {
         editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
         editWelcomeMessageButton.setOnClickListener(v -> showWelcomeMessageDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
+        musicToggleButton.setOnClickListener(v -> toggleDemoMusic());
+        musicStopButton.setOnClickListener(v -> {
+            appendLog("[UI] 手动结束示例音乐");
+            stopDemoMusic();
+        });
     }
 
     /**
@@ -672,6 +690,7 @@ public class MainActivity extends AppCompatActivity {
         renderSdkInfo();
         renderVoiceModeControls();
         renderSessionConfigControls();
+        renderMusicControls();
         updateActionButtons(currentSessionState);
     }
 
@@ -1006,8 +1025,10 @@ public class MainActivity extends AppCompatActivity {
         }
         player.setOnCompletionListener(completedPlayer -> stopDemoMusic());
         musicPlayer = player;
+        musicPaused = false;
         player.start();
         appendLog("[Demo] 开始播放内置音乐 res/raw/music1.mp3");
+        renderMusicControls();
         return true;
     }
 
@@ -1020,12 +1041,70 @@ public class MainActivity extends AppCompatActivity {
         if (player == null) {
             return;
         }
+        musicPaused = false;
         try {
             player.stop();
         } catch (IllegalStateException ignored) {
             // 播放器已经结束或被系统回收时 stop 会抛异常，这里只需要继续释放。
         }
         player.release();
+        renderMusicControls();
+    }
+
+    /**
+     * 播放 / 暂停同一个按键：正在播就暂停，暂停中就继续。
+     */
+    private void toggleDemoMusic() {
+        MediaPlayer player = musicPlayer;
+        if (player == null) {
+            return;
+        }
+        try {
+            if (player.isPlaying()) {
+                player.pause();
+                musicPaused = true;
+                appendLog("[UI] 示例音乐已暂停");
+            } else {
+                player.start();
+                musicPaused = false;
+                appendLog("[UI] 示例音乐继续播放");
+            }
+        } catch (IllegalStateException e) {
+            appendLog("[Demo] 音乐控制失败: " + e.getMessage());
+            return;
+        }
+        renderMusicControls();
+    }
+
+    /**
+     * 刷新音乐控制区：有音乐才显示暂停/结束，没有音乐时只留一行引导文案。
+     *
+     * 场景示例：AI 调用 play_music 后控制区出现，用户按“暂停”音乐停下但会话已断开；
+     * 再按“继续”可以接着听，按“结束”释放播放器后回到默认界面。
+     */
+    private void renderMusicControls() {
+        boolean active = musicPlayer != null;
+        boolean paused = musicPaused;
+        String demoLanguage = AppPrefs.getDemoLanguage(this);
+        runOnUiThread(() -> {
+            musicControlLayout.setVisibility(active ? View.VISIBLE : View.GONE);
+            musicHintText.setVisibility(active ? View.GONE : View.VISIBLE);
+            musicTitleText.setText(getLocalizedText(
+                    R.string.music_player_title,
+                    R.string.music_player_title_ja,
+                    demoLanguage
+            ));
+            musicToggleButton.setText(getLocalizedText(
+                    paused ? R.string.music_resume : R.string.music_pause,
+                    paused ? R.string.music_resume_ja : R.string.music_pause_ja,
+                    demoLanguage
+            ));
+            musicStopButton.setText(getLocalizedText(
+                    R.string.music_stop,
+                    R.string.music_stop_ja,
+                    demoLanguage
+            ));
+        });
     }
 
     /**

@@ -141,6 +141,16 @@
     <string name="logs_panel_ja">実行ログ</string>
     <string name="logs_empty">日志输出会显示在这里</string>
     <string name="logs_empty_ja">ログはここに表示されます</string>
+    <string name="music_player_title">示例音乐</string>
+    <string name="music_player_title_ja">サンプル音楽</string>
+    <string name="music_hint">聊天过程中可以说“放首歌”，AI 会为你播放</string>
+    <string name="music_hint_ja">会話中に「音楽を流して」と言うと、AI が再生します</string>
+    <string name="music_pause">暂停</string>
+    <string name="music_pause_ja">一時停止</string>
+    <string name="music_resume">继续</string>
+    <string name="music_resume_ja">再開</string>
+    <string name="music_stop">结束</string>
+    <string name="music_stop_ja">停止</string>
     <string name="clear_logs">清空日志</string>
     <string name="clear_logs_ja">ログを消去</string>
     <string name="text_input_empty_error">请输入要发送的文本</string>
