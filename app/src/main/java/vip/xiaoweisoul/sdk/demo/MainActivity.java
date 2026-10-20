@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -34,6 +35,7 @@ import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -58,6 +60,7 @@ import vip.xiaoweisoul.sdk.sessioncore.SessionEventListener;
 import vip.xiaoweisoul.sdk.sessioncore.SessionState;
 import vip.xiaoweisoul.sdk.sessioncore.SessionStateEvent;
 import vip.xiaoweisoul.sdk.sessioncore.SessionTool;
+import vip.xiaoweisoul.sdk.sessioncore.SessionToolResult;
 import vip.xiaoweisoul.sdk.sessioncore.ToolInvocationEvent;
 import vip.xiaoweisoul.sdk.sessioncore.UserInputCommittedEvent;
 import vip.xiaoweisoul.sdk.sessioncore.XiaoweiSessionClient;
@@ -114,6 +117,8 @@ public class MainActivity extends AppCompatActivity {
     private final AssistantResponseTracker assistantResponseTracker = new AssistantResponseTracker();
     // Demo 宿主负责正式的下行 PCM 播放链路，SDK 只负责回调统一 PcmFrame。
     private AssistantPcmPlayer assistantPcmPlayer;
+    // 放歌工具自己持有的播放器；会话结束后音乐要继续播，所以不能挂在 TTS 播放链路上。
+    private MediaPlayer musicPlayer;
     private String assistantPlaybackStrategyPreference;
 
     // 按文档建议，Demo 在单次连接内用简单自增数字生成 client_input_id。
@@ -228,6 +233,7 @@ public class MainActivity extends AppCompatActivity {
             assistantPcmPlayer.release();
             assistantPcmPlayer = null;
         }
+        stopDemoMusic();
         if (manualListenPanelAnimator != null) {
             manualListenPanelAnimator.cancel();
             manualListenPanelAnimator = null;
@@ -878,6 +884,8 @@ public class MainActivity extends AppCompatActivity {
                         + "## 边界\n"
                         + "- 只控制 Android STREAM_MUSIC，不控制通话、闹钟或通知音量。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                // 只有调大音量配了执行前提示语，可以和下面没有配的调小音量工具直接对比效果。
+                "好的，我马上给你调",
                 () -> adjustMediaVolume(DEVICE_CONTROL_STEP_PERCENT)
         );
         registerDeviceControlTool(
@@ -891,6 +899,7 @@ public class MainActivity extends AppCompatActivity {
                         + "## 边界\n"
                         + "- 只控制 Android STREAM_MUSIC，不控制通话、闹钟或通知音量。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                null,
                 () -> adjustMediaVolume(-DEVICE_CONTROL_STEP_PERCENT)
         );
         registerDeviceControlTool(
@@ -906,6 +915,7 @@ public class MainActivity extends AppCompatActivity {
                         + "- 如果设备当前是自动亮度模式，工具会先切到手动亮度模式。\n"
                         + "- 首次调用时，系统可能要求用户授予“修改系统设置”权限。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                null,
                 () -> adjustScreenBrightness(DEVICE_CONTROL_STEP_PERCENT)
         );
         registerDeviceControlTool(
@@ -921,8 +931,101 @@ public class MainActivity extends AppCompatActivity {
                         + "- 如果设备当前是自动亮度模式，工具会先切到手动亮度模式。\n"
                         + "- 首次调用时，系统可能要求用户授予“修改系统设置”权限。\n"
                         + "- 不要用这个工具表达 AI 情绪；右上角表情由 LLM emotion 自动驱动。",
+                null,
                 () -> adjustScreenBrightness(-DEVICE_CONTROL_STEP_PERCENT)
         );
+        sessionClient.registerTool(new SessionTool() {
+            @NonNull
+            @Override
+            public String getName() {
+                return "play_music";
+            }
+
+            @NonNull
+            @Override
+            public String getDescription() {
+                return "## 工具作用\n"
+                        + "播放 App 内置的一段示例音乐。\n\n"
+                        + "## 必须调用\n"
+                        + "- 用户明确要求放歌、播放音乐、来点音乐时，必须调用本工具。\n"
+                        + "- 直接调用本工具，调用前不要用自然语言预告播放结果：平台会先播报一句固定的执行提示。\n"
+                        + "- 播放开始后本轮对话就结束了，不要在本轮再调用其它工具。\n\n"
+                        + "## 边界\n"
+                        + "- 只能播放内置的一段示例音乐，不能选歌。\n"
+                        + "- 不支持暂停、继续或停止；音乐播放到结尾会自动结束。";
+            }
+
+            @NonNull
+            @Override
+            public String getInputSchemaJson() {
+                return """
+                        {
+                          "type": "object",
+                          "properties": {},
+                          "additionalProperties": false
+                        }
+                        """;
+            }
+
+            /**
+             * 平台先播完这句，再下发 tools/call；这样音乐不会和 AI 语音叠在一起。
+             */
+            @Nullable
+            @Override
+            public String getBeforeCallMessage() {
+                return "好的，我马上给你放";
+            }
+
+            /**
+             * 播放成功后返回 endSession，让服务端收尾并关闭连接；没播成功就交回给 AI 解释并继续对话。
+             */
+            @NonNull
+            @Override
+            public SessionToolResult invokeForResult(@NonNull String argumentsJson) {
+                if (!startDemoMusic()) {
+                    return SessionToolResult.text("内置音乐播放失败，没有开始播放。");
+                }
+                return SessionToolResult.endSession("内置音乐已经开始播放。");
+            }
+        });
+    }
+
+    /**
+     * 播放 App 内置示例音乐，返回是否真正开始播放。
+     *
+     * 为什么用独立 MediaPlayer：这段音乐由工具自己负责，会话收到 endSession 断开时不能跟着停。
+     * 场景示例：用户说“放首歌”，AI 回一句马上播放，工具启动音乐并返回 endSession；
+     * 连接随后关闭，但用户要继续听到音乐，所以这里不能复用 TTS 的 AssistantPcmPlayer。
+     */
+    private boolean startDemoMusic() {
+        stopDemoMusic();
+        MediaPlayer player = MediaPlayer.create(this, R.raw.music1);
+        if (player == null) {
+            appendLog("[Demo] 内置音乐创建失败 res/raw/music1.mp3");
+            return false;
+        }
+        player.setOnCompletionListener(completedPlayer -> stopDemoMusic());
+        musicPlayer = player;
+        player.start();
+        appendLog("[Demo] 开始播放内置音乐 res/raw/music1.mp3");
+        return true;
+    }
+
+    /**
+     * 停止并释放内置音乐播放器；重复调用安全。
+     */
+    private void stopDemoMusic() {
+        MediaPlayer player = musicPlayer;
+        musicPlayer = null;
+        if (player == null) {
+            return;
+        }
+        try {
+            player.stop();
+        } catch (IllegalStateException ignored) {
+            // 播放器已经结束或被系统回收时 stop 会抛异常，这里只需要继续释放。
+        }
+        player.release();
     }
 
     /**
@@ -987,6 +1090,7 @@ public class MainActivity extends AppCompatActivity {
     private void registerDeviceControlTool(
             @NonNull String toolName,
             @NonNull String description,
+            @Nullable String beforeCallMessage,
             @NonNull DeviceToolAction action
     ) {
         sessionClient.registerTool(new SessionTool() {
@@ -1012,6 +1116,15 @@ public class MainActivity extends AppCompatActivity {
                           "additionalProperties": false
                         }
                         """;
+            }
+
+            /**
+             * 返回 null 表示不播前置语，工具立即执行。
+             */
+            @Nullable
+            @Override
+            public String getBeforeCallMessage() {
+                return beforeCallMessage;
             }
 
             @Override
@@ -1260,6 +1373,8 @@ public class MainActivity extends AppCompatActivity {
      */
     private void runConnect() {
         try {
+            // 新会话要用麦克风和 TTS，上一轮放歌工具留下的音乐先停掉，避免和 AI 语音叠在一起。
+            stopDemoMusic();
             AppPrefs.ConnectionSettings settings = AppPrefs.loadConnectionSettings(this);
             String sessionPrompt = AppPrefs.getSessionPrompt(this);
             boolean sessionPromptEnabled = AppPrefs.isSessionPromptEnabled(this);
