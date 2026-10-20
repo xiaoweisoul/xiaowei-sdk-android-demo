@@ -745,9 +745,13 @@ public class MainActivity extends AppCompatActivity {
                 buildSoulProfileLabels()
         );
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        // 新列表可能比旧列表短（例如角色被删除后重新拉取），直接恢复旧下标会越界并抛 IndexOutOfBounds。
+        // 场景示例：原来选中第 5 个角色，刷新后只剩 3 个，这里落到第 3 个，而不是继续用下标 4。
+        int lastItemIndex = Math.max(adapter.getCount() - 1, 0);
+        int targetIndex = Math.min(Math.max(selectedIndex, 0), lastItemIndex);
         suppressSoulSelectorCallback = true;
         soulSelectorSpinner.setAdapter(adapter);
-        soulSelectorSpinner.setSelection(Math.max(selectedIndex, 0), false);
+        soulSelectorSpinner.setSelection(targetIndex, false);
         suppressSoulSelectorCallback = false;
     }
 
