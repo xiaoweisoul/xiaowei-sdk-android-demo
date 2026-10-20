@@ -1030,7 +1030,7 @@ public class MainActivity extends AppCompatActivity {
             @Nullable
             @Override
             public String getBeforeCallMessage() {
-                return "好的，我马上给你放";
+                return "好的，马上为您播放！";
             }
 
             /**
