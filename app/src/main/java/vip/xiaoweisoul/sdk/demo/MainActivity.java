@@ -10,6 +10,8 @@ import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
 import android.text.InputType;
 import android.text.TextUtils;
@@ -31,6 +33,7 @@ import android.widget.LinearLayout;
 import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.ScrollView;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 
@@ -90,6 +93,7 @@ public class MainActivity extends AppCompatActivity {
     private static final boolean LOG_ASSISTANT_PCM_FRAMES = false;
     private static final String[] DEMO_LANGUAGES = new String[]{AppPrefs.DEMO_LANGUAGE_ZH, AppPrefs.DEMO_LANGUAGE_JA};
     private static final int DEVICE_CONTROL_STEP_PERCENT = 10;
+    private static final long MUSIC_PROGRESS_INTERVAL_MS = 500L;
     private static final int SCREEN_BRIGHTNESS_SYSTEM_MIN = 0;
     private static final int SCREEN_BRIGHTNESS_SYSTEM_MAX = 255;
     // Demo 直接在代码中演示 hello.session_config.idle_timeout_ms；设为 null 表示本次握手不上报该字段，如果您要设置的话建议最低不小于3分钟（180000）
@@ -121,12 +125,18 @@ public class MainActivity extends AppCompatActivity {
     private volatile MediaPlayer musicPlayer;
     // 工具线程和 UI 线程都会读写播放状态，用 volatile 保证界面看到的是最新值。
     private volatile boolean musicPaused;
-    // 音乐控制区默认隐藏，play_music 真正开始播放后才显示。
-    private LinearLayout musicControlLayout;
+    // 常驻音乐播放条：固定在日志面板下方，空闲时也能手动播放。
     private TextView musicTitleText;
+    private TextView musicStateText;
+    private TextView musicTimeText;
+    private SeekBar musicProgressBar;
     private Button musicToggleButton;
     private Button musicStopButton;
-    private TextView musicHintText;
+    // 用户拖动进度条时暂停自动刷新，否则手指会被回弹的进度顶走。
+    private boolean musicSeeking;
+    private final Handler musicProgressHandler = new Handler(Looper.getMainLooper());
+    // 每 500ms 刷新一次进度条；暂停、结束和页面销毁时移除。
+    private final Runnable musicProgressTick = this::syncMusicProgress;
     private String assistantPlaybackStrategyPreference;
 
     // 按文档建议，Demo 在单次连接内用简单自增数字生成 client_input_id。
@@ -241,6 +251,7 @@ public class MainActivity extends AppCompatActivity {
             assistantPcmPlayer.release();
             assistantPcmPlayer = null;
         }
+        musicProgressHandler.removeCallbacksAndMessages(null);
         stopDemoMusic();
         if (manualListenPanelAnimator != null) {
             manualListenPanelAnimator.cancel();
@@ -314,11 +325,12 @@ public class MainActivity extends AppCompatActivity {
         logsPanelTitleText = findViewById(R.id.text_logs_panel_title);
         logsText = findViewById(R.id.text_logs);
         logsScrollView = findViewById(R.id.scroll_logs);
-        musicControlLayout = findViewById(R.id.layout_music_controls);
         musicTitleText = findViewById(R.id.text_music_title);
+        musicStateText = findViewById(R.id.text_music_state);
+        musicTimeText = findViewById(R.id.text_music_time);
+        musicProgressBar = findViewById(R.id.seek_music_progress);
         musicToggleButton = findViewById(R.id.button_music_toggle);
         musicStopButton = findViewById(R.id.button_music_stop);
-        musicHintText = findViewById(R.id.text_music_hint);
         mainContentBaseBottomPadding = mainContentLayout.getPaddingBottom();
     }
 
@@ -558,10 +570,36 @@ public class MainActivity extends AppCompatActivity {
         editSessionPromptButton.setOnClickListener(v -> showSessionPromptDialog());
         editWelcomeMessageButton.setOnClickListener(v -> showWelcomeMessageDialog());
         clearLogsButton.setOnClickListener(v -> clearLogs());
-        musicToggleButton.setOnClickListener(v -> toggleDemoMusic());
+        musicToggleButton.setOnClickListener(v -> {
+            if (musicPlayer == null) {
+                appendLog("[UI] 手动播放示例音乐");
+                startDemoMusic();
+                return;
+            }
+            toggleDemoMusic();
+        });
         musicStopButton.setOnClickListener(v -> {
             appendLog("[UI] 手动结束示例音乐");
             stopDemoMusic();
+        });
+        musicProgressBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                if (fromUser) {
+                    seekDemoMusic(progress, seekBar.getMax());
+                }
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                musicSeeking = true;
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                musicSeeking = false;
+                syncMusicProgress();
+            }
         });
     }
 
@@ -1077,26 +1115,37 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * 刷新音乐控制区：有音乐才显示暂停/结束，没有音乐时只留一行引导文案。
+     * 刷新常驻音乐播放条：按钮文案、可用状态和进度。
      *
-     * 场景示例：AI 调用 play_music 后控制区出现，用户按“暂停”音乐停下但会话已断开；
-     * 再按“继续”可以接着听，按“结束”释放播放器后回到默认界面。
+     * 场景示例：AI 调用 play_music 后这里变成“播放中”，暂停后变“已暂停”；
+     * 结束或播完后回到“未播放”，播放键仍可手动再播一次。
      */
     private void renderMusicControls() {
         boolean active = musicPlayer != null;
         boolean paused = musicPaused;
         String demoLanguage = AppPrefs.getDemoLanguage(this);
         runOnUiThread(() -> {
-            musicControlLayout.setVisibility(active ? View.VISIBLE : View.GONE);
-            musicHintText.setVisibility(active ? View.GONE : View.VISIBLE);
             musicTitleText.setText(getLocalizedText(
                     R.string.music_player_title,
                     R.string.music_player_title_ja,
                     demoLanguage
             ));
+            if (!active) {
+                musicStateText.setText(getLocalizedText(
+                        R.string.music_state_idle,
+                        R.string.music_state_idle_ja,
+                        demoLanguage
+                ));
+            } else {
+                musicStateText.setText(getLocalizedText(
+                        paused ? R.string.music_state_paused : R.string.music_state_playing,
+                        paused ? R.string.music_state_paused_ja : R.string.music_state_playing_ja,
+                        demoLanguage
+                ));
+            }
             musicToggleButton.setText(getLocalizedText(
-                    paused ? R.string.music_resume : R.string.music_pause,
-                    paused ? R.string.music_resume_ja : R.string.music_pause_ja,
+                    !active ? R.string.music_play : (paused ? R.string.music_resume : R.string.music_pause),
+                    !active ? R.string.music_play_ja : (paused ? R.string.music_resume_ja : R.string.music_pause_ja),
                     demoLanguage
             ));
             musicStopButton.setText(getLocalizedText(
@@ -1104,7 +1153,70 @@ public class MainActivity extends AppCompatActivity {
                     R.string.music_stop_ja,
                     demoLanguage
             ));
+            musicStopButton.setEnabled(active);
+            musicProgressBar.setEnabled(active);
+            musicProgressBar.setAlpha(active ? 1f : 0.4f);
+            if (active) {
+                syncMusicProgress();
+                return;
+            }
+            musicProgressHandler.removeCallbacks(musicProgressTick);
+            musicProgressBar.setProgress(0);
+            musicTimeText.setText(formatMusicTime(0) + " / " + formatMusicTime(0));
         });
+    }
+
+    /**
+     * 把进度条上的比例换算成播放位置。
+     */
+    private void seekDemoMusic(int progress, int max) {
+        MediaPlayer player = musicPlayer;
+        if (player == null || max <= 0) {
+            return;
+        }
+        try {
+            int duration = player.getDuration();
+            if (duration > 0) {
+                player.seekTo((int) ((long) progress * duration / max));
+            }
+        } catch (IllegalStateException e) {
+            appendLog("[Demo] 音乐定位失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 同步一次进度条和时间；播放中每 500ms 由 Handler 再调度一次。
+     */
+    private void syncMusicProgress() {
+        MediaPlayer player = musicPlayer;
+        if (player == null) {
+            musicProgressHandler.removeCallbacks(musicProgressTick);
+            return;
+        }
+        int duration;
+        int position;
+        try {
+            duration = Math.max(player.getDuration(), 0);
+            position = Math.max(player.getCurrentPosition(), 0);
+        } catch (IllegalStateException e) {
+            musicProgressHandler.removeCallbacks(musicProgressTick);
+            return;
+        }
+        if (!musicSeeking) {
+            int max = musicProgressBar.getMax();
+            musicProgressBar.setProgress(duration > 0 ? (int) ((long) position * max / duration) : 0);
+        }
+        musicTimeText.setText(formatMusicTime(position) + " / " + formatMusicTime(duration));
+        musicProgressHandler.removeCallbacks(musicProgressTick);
+        if (!musicPaused) {
+            musicProgressHandler.postDelayed(musicProgressTick, MUSIC_PROGRESS_INTERVAL_MS);
+        }
+    }
+
+    @NonNull
+    private String formatMusicTime(int milliseconds) {
+        int totalSeconds = Math.max(milliseconds, 0) / 1000;
+        return String.format(Locale.ROOT, "%d:%02d", totalSeconds / 60, totalSeconds % 60);
     }
 
     /**
