@@ -26,20 +26,24 @@ final class AppPrefs {
   // private static final String DEFAULT_WS_URL = "ws://192.168.31.108:8000/";
       private static final String DEFAULT_WS_URL = "ws://soul.xiaoweisoul.vip";
 
+    // 这组内置值必须是「专供对外 Demo」的账号（android_demo_user1 / demo_app_1），
+    // 不要填成个人联调账号，也不要靠本机 local.properties 的 demo.local.* 覆盖：
+    // 场景示例：把 APK 发给客户试用时，客户看到的就是这里配的账号和元神；
+    // 一旦覆盖成个人账号，客户会在下拉框里看到开发者的全部测试元神，还会用私人 Key 计费。
     private static final String KEY_ACCESS_KEY_ID = "access_key_id";
-    private static final String DEFAULT_ACCESS_KEY_ID = "ak_be60d1530176d7e4b915ed9c";
+    private static final String DEFAULT_ACCESS_KEY_ID = "ak_e93e77cc31c2112dfb007e1e";
 
     private static final String KEY_ACCESS_KEY_SECRET = "access_key_secret";
-    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7";
+    private static final String DEFAULT_ACCESS_KEY_SECRET = "sk_cb9111d05fba74199c9bc2c6e735940a176feb3b498843be";
 
     private static final String KEY_INTEGRATION_APP_ID = "integration_app_id";
-    private static final String DEFAULT_INTEGRATION_APP_ID = "app_remav935";
+    private static final String DEFAULT_INTEGRATION_APP_ID = "app_hsh2zm8j";
 
     private static final String KEY_END_USER_ID = "end_user_id";
     private static final String DEFAULT_END_USER_ID = "app_demo_end_user_001";
 
     private static final String KEY_SOUL_ID = "soul_id";
-    private static final String DEFAULT_SOUL_ID = "soul_demo_chinese_general_ai_assistant_v1";
+    private static final String DEFAULT_SOUL_ID = "soul_119_mwbroqzu";
 
     private static final String KEY_PROTOCOL_VERSION = "protocol_version";
     private static final String DEFAULT_PROTOCOL_VERSION = "1";

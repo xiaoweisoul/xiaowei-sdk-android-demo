@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.3.0` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.2.0`（`versionCode 216`）です。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.3.0` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.2.1`（`versionCode 217`）です。
 
 Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
@@ -147,24 +147,21 @@ useLocalSdkRepo=true
 |---|---|---|
 | `OpenAPI Base URL` | `http://api.xiaoweisoul.vip` | 内蔵 OpenAPI URL |
 | `WS URL` | `ws://soul.xiaoweisoul.vip` | 内蔵 WebSocket URL |
-| `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内蔵 API Key ID |
-| `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内蔵 API Key Secret |
-| `Integration App ID` | `app_remav935` | 内蔵アプリ ID |
+| `Access Key ID` | `ak_e93e77cc31c2112dfb007e1e` | 内蔵 API Key ID（Demo 専用アカウント `android_demo_user1`） |
+| `Access Key Secret` | `sk_cb9111d05fba74199c9bc2c6e735940a176feb3b498843be` | 内蔵 API Key Secret |
+| `Integration App ID` | `app_hsh2zm8j` | 内蔵アプリ ID（`demo_app_1`） |
 | `End User ID` | `app_demo_end_user_001` | Demo の既定ユーザー ID。公開体験内でのユーザー識別に使用 |
 | `Protocol Version` | `1` | プロトコルバージョン |
 | `Logical Device ID` | `app.demo.device-001` | デフォルトの Logical Device ID |
 | `Logical Client ID` | `sdk.demo.client-001` | デフォルトの Logical Client ID |
-| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 現在の既定値。ロール一覧の取得に成功した場合は、下表の例へ切り替えて試すこともできます |
+| `Soul ID` | `soul_119_mwbroqzu` | 現在の既定値「小微学姐1」。ロール一覧の取得に成功した場合は、下表のもう一つへ切り替えられます |
 
-公開体験環境でよく使うチャットアシスタント `soul_id` の例は次の通りです。
+Demo アカウント（`android_demo_user1`）で利用できる元神は次の通りです。
 
 | 元神名 | `soul_id` |
 |---|---|
-| チャットアシスタント（中国語・女性） | `soul_demo_chinese_female_chat_assistant_v1` |
-| チャットアシスタント（中国語・男性） | `soul_demo_chinese_male_chat_assistant_v1` |
-| チャットアシスタント（日本語・女性） | `soul_demo_japanese_female_chat_assistant_v1` |
-| チャットアシスタント（日本語・男性） | `soul_demo_japanese_male_chat_assistant_v1` |
-| チャットアシスタント（中日女性） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
+| 小微学姐1 | `soul_119_mwbroqzu` |
+| 湾湾小何1 | `soul_119_mwbrpmgd` |
 
 異なる元神をすぐに試したい場合は、次のいずれかが簡単です。
 

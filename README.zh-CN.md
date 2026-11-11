@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.3.0`，并验证最小会话闭环。当前 Demo 版本为 `2.2.0`（`versionCode 216`）。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.3.0`，并验证最小会话闭环。当前 Demo 版本为 `2.2.1`（`versionCode 217`）。
 
 Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
@@ -140,31 +140,27 @@ useLocalSdkRepo=true
 |---|---|---|
 | `OpenAPI Base URL` | `http://api.xiaoweisoul.vip` | 内置 OpenAPI 地址 |
 | `WS URL` | `ws://soul.xiaoweisoul.vip` | 内置 WebSocket 地址 |
-| `Access Key ID` | `ak_be60d1530176d7e4b915ed9c` | 内置 API Key ID |
-| `Access Key Secret` | `sk_672ed90e07f12f657ad913c23f5216bafbe8f74febb19ea7` | 内置 API Key Secret |
-| `Integration App ID` | `app_remav935` | 内置应用 ID |
+| `Access Key ID` | `ak_e93e77cc31c2112dfb007e1e` | 内置 API Key ID（Demo 专用账号 `android_demo_user1`） |
+| `Access Key Secret` | `sk_cb9111d05fba74199c9bc2c6e735940a176feb3b498843be` | 内置 API Key Secret |
+| `Integration App ID` | `app_hsh2zm8j` | 内置应用 ID（`demo_app_1`） |
 | `End User ID` | `app_demo_end_user_001` | Demo 默认终端用户 ID；用于区分公开体验中的用户身份 |
 | `Protocol Version` | `1` | 协议版本 |
 | `Logical Device ID` | `app.demo.device-001` | 默认逻辑设备 ID |
 | `Logical Client ID` | `sdk.demo.client-001` | 默认逻辑客户端 ID |
-| `Soul ID` | `soul_demo_chinese_female_chat_assistant_v1` | 当前默认元神；如果角色列表加载成功，也可以切换为下表中的示例值 |
+| `Soul ID` | `soul_119_mwbroqzu` | 当前默认元神「小微学姐1」；角色列表加载成功后也可切换到下表另一个 |
 
-当前公开体验环境里，常见的聊天助手 `soul_id` 示例包括：
+当前 Demo 账号（`android_demo_user1`）下可用的元神：
 
 | 元神名称 | `soul_id` |
 |---|---|
-| 通用智能助手 | `soul_demo_chinese_general_ai_assistant_v1` |
-| 聊天助手（中文女生） | `soul_demo_chinese_female_chat_assistant_v1` |
-| 聊天助手（中文男生） | `soul_demo_chinese_male_chat_assistant_v1` |
-| 聊天助手（日文女生） | `soul_demo_japanese_female_chat_assistant_v1` |
-| 聊天助手（日文男生） | `soul_demo_japanese_male_chat_assistant_v1` |
-| 聊天助手（中日女生） | `soul_demo_chinese_japanese_female_chat_assistant_v1` |
+| 小微学姐1 | `soul_119_mwbroqzu` |
+| 湾湾小何1 | `soul_119_mwbrpmgd` |
 
 如果你想快速体验不同元神，最直接的方式是：
 
 1. 等主页面成功加载可用角色列表后，直接用下拉框切换
 2. 或者在设置页里手动修改 `Soul ID` 后重新连接
-3. 如果您想在握手协议里面传入自己的个性化角色提示词，请选择 “通用智能助手” 元神
+3. 如果想在握手协议里传入自己的个性化角色提示词，需要账号下有「通用智能助手」这类不预设提示词的元神；Demo 账号暂未提供，可换用自己的账号体验
 
 ## Demo 使用说明
 
