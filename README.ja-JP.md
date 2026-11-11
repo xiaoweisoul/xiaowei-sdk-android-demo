@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.3.0` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.2.1`（`versionCode 217`）です。
+本リポジトリは、Android ホストアプリ向けの SDK サンプルプロジェクトです。`vip.xiaoweisoul.sdk:session-core:1.3.0` をアプリへ組み込み、最小構成の会話フローを確認できます。現在の Demo バージョンは `2.2.2`（`versionCode 218`）です。
 
 Demo のコミット済み既定値は Maven Central から SDK を取得する設定です。ローカル SDK で連携テストする場合は、コミット済みの `gradle.properties` を変更せず、コマンドラインで `-PuseLocalSdkRepo=true` を渡すか、ローカル専用の `local.properties` に `useLocalSdkRepo=true` を設定します。
 
@@ -80,7 +80,7 @@ Demo の実行には、次のパラメータが必要です。
 `prompt` と `welcome_message` はメイン画面の「接続設定」エリアで保存・管理します。
 
 - 各項目は checkbox、表示 / 編集、1 行 summary で構成され、編集内容は次回の `connect()` から反映されます。
-- ウェルカムメッセージは初回インストール時に無効ですが、「你好，欢迎使用小微。」を編集可能な初期文として表示します。
+- ウェルカムメッセージは初回インストール時に既定で有効で、「你好，我是小微，很高兴见到你。」を編集可能な初期文として表示します。
 - checkbox を外しても保存済みテキストは削除されません。有効でも内容が空の場合は上報しません。
 - 通常の assistant テキスト / PCM callback で再生し、ユーザーの割り込み時は既存ルールで停止します。
 

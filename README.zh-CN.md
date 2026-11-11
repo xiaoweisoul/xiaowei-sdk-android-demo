@@ -1,6 +1,6 @@
 # xiaowei-sdk-android-demo
 
-这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.3.0`，并验证最小会话闭环。当前 Demo 版本为 `2.2.1`（`versionCode 217`）。
+这是一个面向 Android 宿主接入方的 SDK 示例工程，用来帮助你在 App 中集成 `vip.xiaoweisoul.sdk:session-core:1.3.0`，并验证最小会话闭环。当前 Demo 版本为 `2.2.2`（`versionCode 218`）。
 
 Demo 提交默认依赖 Maven Central，方便外部用户直接打开工程验证公开接入路径。SDK 本地联调时不要修改已提交的 `gradle.properties`，可以通过命令行 `-PuseLocalSdkRepo=true`，或在本机不提交的 `local.properties` 中设置 `useLocalSdkRepo=true`。
 
@@ -73,7 +73,7 @@ Demo 运行时需要你自己填写以下参数：
 `prompt` 和 `welcome_message` 在主页面“连接配置”区域持久化维护：
 
 - 每项均采用“复选框 + 查看/编辑 + 单行摘要”；编辑内容只影响下一次 `connect()`。
-- 欢迎语首次安装默认关闭，但预置“你好，欢迎使用小微。”作为可编辑文案。
+- 欢迎语首次安装默认开启，预置“你好，我是小微，很高兴见到你。”作为可编辑文案。
 - 取消勾选只停止上报，已保存文本不会被清除；勾选且内容为空时也不会上报。
 - 欢迎语使用普通 assistant 文本/PCM 回调播放，用户说话时允许按现有插话规则打断。
 

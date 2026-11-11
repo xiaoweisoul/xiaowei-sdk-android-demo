@@ -78,9 +78,11 @@ final class AppPrefs {
     private static final String DEFAULT_TTS_PLAYBACK_STRATEGY = TTS_PLAYBACK_STRATEGY_DUCK_OTHERS;
     private static final String DEFAULT_VOICE_INPUT_MODE = VOICE_INPUT_MODE_REALTIME;
     private static final boolean DEFAULT_SESSION_PROMPT_ENABLED = false;
-    // 首次安装只预置可编辑文案，不主动播放；用户明确勾选后，下一次连接才会上报。
-    private static final boolean DEFAULT_WELCOME_MESSAGE_ENABLED = false;
-    private static final String DEFAULT_WELCOME_MESSAGE = "你好，欢迎使用小微。";
+    // 对外 Demo 默认开启欢迎语：握手成功后立刻有声音，用户才知道已经接通。
+    // 场景示例：客户在安静房间点“连接”，若没有欢迎语，界面只是状态变了却没有声音，会以为没连上。
+    // 这段文案由客户端随 hello 上报，服务端只负责用当前元神的音色念出来，所以写通用话术、不绑某个元神。
+    private static final boolean DEFAULT_WELCOME_MESSAGE_ENABLED = true;
+    private static final String DEFAULT_WELCOME_MESSAGE = "你好，我是小微，很高兴见到你。";
     private static final String DEFAULT_SESSION_PROMPT = "你是一位专业的产品解说员。请根据以下广告内容进行生动、自然的口语化讲解：\n"
             + "\n"
             + "【广告内容】\n"
